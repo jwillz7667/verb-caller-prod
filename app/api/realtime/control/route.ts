@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
+import { buildServerUpdateFromEnv, buildServerUpdate, getRealtimeControlSettings, setRealtimeControlSettings } from '@/lib/realtimeControl'
 import { verifyHmacSignature } from '@/lib/webhooks'
 
 export const runtime = 'nodejs'
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     console.log('Realtime control webhook event:', body?.type || body?.event?.type || 'unknown')
 
     // Build a session.update from env defaults and return as events[]
-    const update = buildServerUpdateFromEnv()
+    const update = buildServerUpdate()
     return Response.json({ events: [update] })
   } catch (e: any) {
     console.error('POST /api/realtime/control error', e)

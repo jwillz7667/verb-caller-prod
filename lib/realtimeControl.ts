@@ -8,6 +8,45 @@ type TurnDetectionVad = {
   interrupt_response?: boolean
 }
 
+export type RealtimeControlSettings = {
+  voice?: string
+  tool_choice?: 'auto' | 'required' | 'none'
+  modalities?: Array<'audio' | 'text'>
+  temperature?: number
+  max_output_tokens?: number | null
+  turn_detection?:
+    | { type: 'none' }
+    | {
+        type: 'server_vad'
+        threshold?: number
+        prefix_padding_ms?: number
+        silence_duration_ms?: number
+        create_response?: boolean
+        interrupt_response?: boolean
+        semantic?: boolean // experimental
+      }
+  input_audio_format?: { type: 'audio/pcm'; rate: number }
+  transcription?: {
+    enabled: boolean
+    model: string
+    prompt?: string
+    language?: string
+    logprobs?: boolean
+    include_segments?: boolean
+  }
+  noise_reduction?: 'near_field' | 'none'
+}
+
+let dynamicSettings: RealtimeControlSettings | null = null
+
+export function setRealtimeControlSettings(s: RealtimeControlSettings | null) {
+  dynamicSettings = s
+}
+
+export function getRealtimeControlSettings(): RealtimeControlSettings | null {
+  return dynamicSettings
+}
+
 export function buildServerUpdateFromEnv() {
   const voice = process.env.REALTIME_DEFAULT_VOICE || undefined
   const toolChoice = process.env.REALTIME_DEFAULT_TOOL_CHOICE || undefined
@@ -58,6 +97,22 @@ export function buildServerUpdateFromEnv() {
   return { type: 'session.update', session }
 }
 
+export function buildServerUpdate() {
+  const s = getRealtimeControlSettings()
+  if (!s) return buildServerUpdateFromEnv()
+  const session: any = {}
+  if (s.voice) session.voice = s.voice
+  if (s.tool_choice) session.tool_choice = s.tool_choice
+  if (Array.isArray(s.modalities) && s.modalities.length > 0) session.modalities = s.modalities
+  if (typeof s.temperature === 'number') session.temperature = s.temperature
+  if (typeof s.max_output_tokens === 'number') session.max_output_tokens = s.max_output_tokens
+  if (s.turn_detection) session.turn_detection = s.turn_detection
+  if (s.input_audio_format) session.input_audio_format = s.input_audio_format
+  if (s.transcription && s.transcription.enabled) session.transcription = s.transcription
+  if (s.noise_reduction) session.noise_reduction = s.noise_reduction
+  return { type: 'session.update', session }
+}
+
 function parseMaybeFloat(v?: string, fallback?: number) {
   if (v == null) return fallback
   const n = parseFloat(v)
@@ -75,4 +130,3 @@ function parseMaybeBool(v?: string) {
   if (s === 'false') return false
   return undefined
 }
-

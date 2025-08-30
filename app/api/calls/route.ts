@@ -40,8 +40,11 @@ export async function POST(req: NextRequest) {
       url: twimlUrl,
     }
     if (data.record) {
-      callCreatePayload.record = 'record-from-ringing'
+      callCreatePayload.record = true
       callCreatePayload.recordingChannels = 'dual'
+      // Optionally: callCreatePayload.recordingTrack = 'both'
+    } else {
+      callCreatePayload.record = false
     }
 
     const call = await client.calls.create(callCreatePayload)
