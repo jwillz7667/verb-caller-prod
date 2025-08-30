@@ -180,6 +180,8 @@ export default function DashboardForm() {
   const [includeServerWebhook, setIncludeServerWebhook] = useState(false)
   const [serverSecret, setServerSecret] = useState('')
   const [hostOrigin, setHostOrigin] = useState('')
+  const [autoUpdateTwilio, setAutoUpdateTwilio] = useState(false)
+  const [twilioUpdating, setTwilioUpdating] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -410,6 +412,24 @@ export default function DashboardForm() {
       const twimlLocal = `${window.location.origin}/api/twiml?secret=${encodeURIComponent(secret)}`
       setGenerated({ secret, sipUri, twimlProd, twimlLocal, expiresAt })
       toast.success('Client secret generated')
+      if (autoUpdateTwilio) {
+        setTwilioUpdating(true)
+        try {
+          const r = await fetch('/api/twilio/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret }) })
+          const txt = await r.text()
+          const json = txt ? JSON.parse(txt) : {}
+          if (!r.ok || !json?.ok) {
+            const msg = json?.error || `Failed to update Twilio webhook (${r.status})`
+            throw new Error(msg)
+          }
+          toast.success('Twilio webhook updated')
+          console.log('Webhook updated:', json)
+        } catch (e: any) {
+          toast.error(e?.message || 'Failed to update Twilio webhook')
+        } finally {
+          setTwilioUpdating(false)
+        }
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Failed to generate')
     } finally {
@@ -577,6 +597,12 @@ export default function DashboardForm() {
           <Button type="button" onClick={generateClientSecret} disabled={genLoading} className="bg-brand-600 hover:bg-brand-500">
             {genLoading ? 'Generating…' : 'Generate Client Secret'}
           </Button>
+          <div className="flex items-center gap-2">
+            <button type="button" role="switch" aria-checked={autoUpdateTwilio} onClick={() => setAutoUpdateTwilio((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${autoUpdateTwilio ? 'bg-brand-600' : 'bg-neutral-700'}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${autoUpdateTwilio ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+            <span className="text-sm text-neutral-400">Auto-update Twilio webhook</span>
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
@@ -627,7 +653,26 @@ export default function DashboardForm() {
                 <p className="text-xs text-neutral-400">Twilio Webhook (This Host)</p>
                 <p className="truncate font-mono text-sm">{generated.twimlLocal}</p>
               </div>
-              <CopyButton value={generated.twimlLocal} />
+              <div className="flex items-center gap-2">
+                <CopyButton value={generated.twimlLocal} />
+                <Button type="button" disabled={twilioUpdating} onClick={async () => {
+                  try {
+                    setTwilioUpdating(true)
+                    const r = await fetch('/api/twilio/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: generated.secret }) })
+                    const txt = await r.text()
+                    const json = txt ? JSON.parse(txt) : {}
+                    if (!r.ok || !json?.ok) {
+                      const msg = json?.error || `Failed (${r.status})`
+                      throw new Error(msg)
+                    }
+                    toast.success('Twilio webhook updated')
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Update failed')
+                  } finally {
+                    setTwilioUpdating(false)
+                  }
+                }}>{twilioUpdating ? 'Updating…' : 'Apply to Twilio'}</Button>
+              </div>
             </div>
             {generated.expiresAt && (
               <p className="text-xs text-neutral-500">Expires at: {new Date(generated.expiresAt * 1000).toLocaleString()}</p>
