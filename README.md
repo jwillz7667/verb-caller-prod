@@ -45,6 +45,26 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
   - `x-openai-signature-timestamp` (or `x-openai-timestamp`)
 - Verification: HMAC-SHA256 over `timestamp + '.' + rawBody` (or rawBody if no timestamp), compared in constant time against the provided signature (hex or base64). Timestamp tolerance configurable via `REALTIME_CONTROL_TOLERANCE_SECONDS` (default 300s).
 
+### Control Defaults via Env
+- Voice: `REALTIME_DEFAULT_VOICE=alloy`
+- Tool choice: `REALTIME_DEFAULT_TOOL_CHOICE=auto`
+- Modalities: `REALTIME_DEFAULT_MODALITIES=audio` (comma-separated)
+- Temperature: `REALTIME_DEFAULT_TEMPERATURE=0.7`
+- Max tokens: `REALTIME_DEFAULT_MAX_OUTPUT_TOKENS=` (blank = infinite)
+- Turn detection: `REALTIME_TURN_DETECTION=server_vad|none`
+  - `REALTIME_VAD_THRESHOLD=0.5`
+  - `REALTIME_VAD_PREFIX_MS=300`
+  - `REALTIME_VAD_SILENCE_MS=200`
+  - `REALTIME_VAD_SEMANTIC=false` (experimental semantic VAD)
+- Noise reduction: `REALTIME_NOISE_REDUCTION=near_field|none`
+- Input audio: `REALTIME_INPUT_AUDIO_RATE=24000`
+- Transcription:
+  - `REALTIME_TRANSCRIPTION_ENABLED=false`
+  - `REALTIME_TRANSCRIPTION_MODEL=gpt-4o-transcribe`
+  - Optional: `REALTIME_TRANSCRIPTION_PROMPT`, `REALTIME_TRANSCRIPTION_LANGUAGE`, `REALTIME_TRANSCRIPTION_LOGPROBS`, `REALTIME_TRANSCRIPTION_SEGMENTS`
+
+Note: The Dashboard “Server Control Settings” UI can override these defaults at runtime (in-memory) when saved using `REALTIME_CONTROL_ADMIN_SECRET`.
+
 ## Environment
 - `OPENAI_API_KEY`: Server-side key used to mint ephemeral client secrets.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: Twilio credentials.
