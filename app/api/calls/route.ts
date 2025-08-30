@@ -45,8 +45,10 @@ export async function POST(req: NextRequest) {
 
     return Response.json({ callSid: call.sid, client_secret: eph.client_secret, url: twimlUrl })
   } catch (err: any) {
-    console.error('POST /api/calls error', err)
-    return Response.json({ error: err?.message || 'Internal error' }, { status: 500 })
+    const status = err?.response?.status || 500
+    const detail = err?.response?.data || { error: err?.message || 'Internal error' }
+    console.error('POST /api/calls error', detail)
+    return Response.json(detail, { status })
   }
 }
 

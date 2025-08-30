@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     const token = await createEphemeralClientSecret(apiKey, parsed.data)
     return Response.json(token)
   } catch (e: any) {
-    console.error('POST /api/realtime-token error', e)
-    return Response.json({ error: e?.message || 'Internal error' }, { status: 500 })
+    const status = e?.response?.status || 500
+    const detail = e?.response?.data || { error: e?.message || 'Internal error' }
+    console.error('POST /api/realtime-token error', detail)
+    return Response.json(detail, { status })
   }
 }
-
