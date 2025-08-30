@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
       return new Response('<Response><Say>Forbidden</Say></Response>', { status: 403, headers: { 'Content-Type': 'text/xml' } })
     }
   }
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>sip:${secret}@${sipDomain}</Sip>\n  </Dial>\n</Response>`
+  // Prefer TLS on 5061 for SIP
+  const sipUri = `sip:${secret}@${sipDomain}:5061;transport=tls`
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${sipUri}</Sip>\n  </Dial>\n</Response>`
   return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
 }
