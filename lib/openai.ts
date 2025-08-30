@@ -32,5 +32,23 @@ export async function createEphemeralClientSecret(apiKey: string, payload: Ephem
       timeout: 15000
     }
   )
-  return res.data as { client_secret: { value: string; expires_at?: number } }
+  const data = res.data as any
+  if (data?.error) {
+    const err: any = new Error(data.error?.message || 'OpenAI error')
+    err.response = { status: res.status, data }
+    throw err
+  }
+  let value: string | undefined
+  let expires_at: number | undefined
+  if (data?.client_secret?.value) {
+    value = data.client_secret.value
+    expires_at = data.client_secret.expires_at
+  } else if (typeof data?.client_secret === 'string') {
+    value = data.client_secret
+    expires_at = data?.expires_at
+  } else if (typeof data?.value === 'string') {
+    value = data.value
+    expires_at = data?.expires_at
+  }
+  return { client_secret: { value: value as string, expires_at } }
 }
