@@ -9,7 +9,6 @@ import { Select } from './ui/Select'
 import { Toggle } from './ui/Toggle'
 import { Button } from './ui/Button'
 import toast from 'react-hot-toast'
-import { allowClientCredsClient } from '@/lib/config'
 import { fileToBase64 } from '@/lib/utils'
 import { CopyButton } from './ui/CopyButton'
 import type { RealtimeSession } from '@/lib/validation'
@@ -27,10 +26,6 @@ const ToolFormSchema = z.object({
 })
 
 export type DashboardValues = {
-  openaiApiKey?: string
-  twilioAccountSid?: string
-  twilioAuthToken?: string
-  twilioFromNumber?: string
   toNumber: string
   record: boolean
   expiresSeconds: number
@@ -65,10 +60,6 @@ export default function DashboardForm() {
   const form = useForm<DashboardValues>({
     resolver: zodResolver(
       z.object({
-        openaiApiKey: z.string().optional(),
-        twilioAccountSid: z.string().optional(),
-        twilioAuthToken: z.string().optional(),
-        twilioFromNumber: z.string().optional(),
         toNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, 'Must be E.164'),
         record: z.boolean().default(true),
         expiresSeconds: z.number().min(60).max(3600).default(600),
@@ -258,10 +249,6 @@ export default function DashboardForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          openaiApiKey: values.openaiApiKey,
-          twilioAccountSid: values.twilioAccountSid,
-          twilioAuthToken: values.twilioAuthToken,
-          twilioFromNumber: values.twilioFromNumber,
           toNumber: values.toNumber,
           record: values.record,
           ephemeral: {
@@ -405,7 +392,6 @@ export default function DashboardForm() {
         body.server = { url: serverUrlProd }
         if (serverSecret) body.server.secret = serverSecret
       }
-      if (v.openaiApiKey) body.openaiApiKey = v.openaiApiKey
       const res = await fetch('/api/realtime-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
         const txt = await res.text()
@@ -433,23 +419,10 @@ export default function DashboardForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      {allowClientCredsClient() ? (
-        <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-          <h2 className="mb-4 text-lg font-semibold">Credentials</h2>
-          <p className="mb-4 text-sm text-neutral-400">Provide keys here for development. In production, set env vars server-side. Avoid storing secrets in localStorage.</p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="OpenAI API Key" placeholder="sk-..." {...form.register('openaiApiKey')} />
-            <Input label="Twilio Account SID" placeholder="AC..." {...form.register('twilioAccountSid')} />
-            <Input label="Twilio Auth Token" placeholder="..." {...form.register('twilioAuthToken')} />
-            <Input label="Twilio From Number" placeholder="+1..." {...form.register('twilioFromNumber')} />
-          </div>
-        </section>
-      ) : (
-        <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-          <h2 className="mb-2 text-lg font-semibold">Credentials</h2>
-          <p className="text-sm text-neutral-400">Server-managed. Set env vars in Vercel: OPENAI_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.</p>
-        </section>
-      )}
+      <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
+        <h2 className="mb-2 text-lg font-semibold">Credentials</h2>
+        <p className="text-sm text-neutral-400">Server-managed. Configure env vars in Vercel: OPENAI_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.</p>
+      </section>
 
       <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
         <h2 className="mb-4 text-lg font-semibold">Realtime Session</h2>
