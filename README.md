@@ -24,6 +24,21 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 - Configure your Twilio phone number Voice webhook (Incoming Call) to: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`
   The TwiML returned uses `sips:` to route over TLS to OpenAI SIP.
 
+### Using Prompt References (optional)
+You can attach a prebuilt Prompt to the Realtime session when minting an ephemeral client secret by including a `session.prompt` object:
+
+POST /api/realtime-token
+{
+  "expires_after": { "anchor": "created_at", "seconds": 600 },
+  "session": {
+    "type": "realtime",
+    "model": "gpt-realtime",
+    "prompt": { "id": "pmpt_XXXX", "version": "2" }
+  }
+}
+
+Note: You can provide either `session.instructions` or `session.prompt` (or both). The server validates that at least one is present and forwards only supported session fields to OpenAI.
+
 ### Server-Side Control (Optional)
 - Endpoint: `POST https://YOUR_DOMAIN/api/realtime/control`
 - Auth (optional): Set `REALTIME_CONTROL_SECRET` and send `Authorization: Bearer <secret>` from OpenAI (if supported) or leave unset to allow unauthenticated.

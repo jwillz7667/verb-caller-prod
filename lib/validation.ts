@@ -15,10 +15,14 @@ export const TranscriptionSchema = z.object({
   include_segments: z.boolean().optional(),
 })
 
-export const RealtimeSessionSchema = z.object({
+const RealtimeSessionCore = z.object({
   type: z.literal('realtime').default('realtime'),
   model: z.string().default('gpt-realtime'),
-  instructions: z.string().min(1),
+  instructions: z.string().min(1).optional(),
+  prompt: z.object({
+    id: z.string().min(1),
+    version: z.union([z.string(), z.number()]).optional(),
+  }).optional(),
   tools: z.array(ToolSchema).optional().default([]),
   tool_choice: z.enum(['auto', 'required', 'none']).default('auto'),
   temperature: z.number().min(0).max(2).default(0.7),
@@ -49,6 +53,11 @@ export const RealtimeSessionSchema = z.object({
     })
   ).optional().default([])
 })
+
+export const RealtimeSessionSchema = RealtimeSessionCore.refine(
+  (s) => (typeof s.instructions === 'string' && s.instructions.length > 0) || !!s.prompt,
+  { message: 'Provide either instructions or a prompt reference.' }
+)
 
 export const EphemeralRequestSchema = z.object({
   expires_after: z.object({

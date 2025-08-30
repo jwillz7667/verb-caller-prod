@@ -4,11 +4,16 @@ import type { EphemeralRequest } from './validation'
 function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   // Deep clone to avoid mutating caller input
   const body: any = JSON.parse(JSON.stringify(payload))
-  const allowedSession = new Set(['type', 'model', 'instructions'])
+  const allowedSession = new Set(['type', 'model', 'instructions', 'prompt'])
   const s = body.session || {}
   const filteredSession: Record<string, any> = {}
   for (const k of Object.keys(s)) {
     if (allowedSession.has(k)) filteredSession[k] = s[k]
+  }
+  // Normalize prompt.version to string if provided as number
+  if (filteredSession.prompt && typeof filteredSession.prompt === 'object') {
+    const v = filteredSession.prompt.version
+    if (typeof v === 'number') filteredSession.prompt.version = String(v)
   }
   // Only keep top-level fields allowed by the endpoint
   const cleaned: any = {
