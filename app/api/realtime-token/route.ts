@@ -1,0 +1,21 @@
+import { NextRequest } from 'next/server'
+import { EphemeralRequestSchema } from '@/lib/validation'
+import { createEphemeralClientSecret } from '@/lib/openai'
+
+export const runtime = 'nodejs'
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const parsed = EphemeralRequestSchema.safeParse(body)
+    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 })
+    const apiKey = process.env.OPENAI_API_KEY || body.openaiApiKey
+    if (!apiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
+    const token = await createEphemeralClientSecret(apiKey, parsed.data)
+    return Response.json(token)
+  } catch (e: any) {
+    console.error('POST /api/realtime-token error', e)
+    return Response.json({ error: e?.message || 'Internal error' }, { status: 500 })
+  }
+}
+

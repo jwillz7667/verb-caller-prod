@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, :root {
+  height: 100%;
+}
+
+body {
+  @apply bg-black text-white antialiased;
+}
+
+.glass {
+  background: rgba(255,255,255,0.03);
+  box-shadow: 0 4px 30px rgba(0,0,0,0.2);
+  backdrop-filter: blur(8px);
+}
+
+.gradient-border {
+  border: 1px solid transparent;
+  background-image: linear-gradient(black, black), radial-gradient(circle at top left, #3a58ff, #0ea5e9);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
