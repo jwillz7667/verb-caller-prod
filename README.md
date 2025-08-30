@@ -23,6 +23,21 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 - Generate a client secret via Realtime API (button to be added) or use the outgoing call flow to see a generated secret value in logs.
 - Configure your Twilio phone number Voice webhook (Incoming Call) to: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`
 
+### Server-Side Control (Optional)
+- Endpoint: `POST https://YOUR_DOMAIN/api/realtime/control`
+- Auth (optional): Set `REALTIME_CONTROL_SECRET` and send `Authorization: Bearer <secret>` from OpenAI (if supported) or leave unset to allow unauthenticated.
+- Response contract: Return `{ "events": [ { "type":"session.update", "session": { ... } } ] }` to push updates like `voice`, `turn_detection`, etc.
+- Defaults: Controlled via env vars (REALTIME_DEFAULT_*). See `.env.example`.
+- To attach this webhook from your session, include a `server` object when minting client secrets if your account supports it:
+  ```json
+  {
+    "expires_after": { "anchor":"created_at","seconds":600 },
+    "session": { "type":"realtime", "model":"gpt-realtime", "instructions":"..." },
+    "server": { "url": "https://YOUR_DOMAIN/api/realtime/control", "secret": "<optional>" }
+  }
+  ```
+  If you receive "unknown parameter" errors when including `server`, omit it and manage settings via WebSocket `session.update` instead.
+
 ## Environment
 - `OPENAI_API_KEY`: Server-side key used to mint ephemeral client secrets.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: Twilio credentials.
@@ -32,4 +47,3 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 
 ## Deploy
 Deploy on Vercel. Ensure env vars are set in the Vercel project. No serverless-esoteric features used.
-

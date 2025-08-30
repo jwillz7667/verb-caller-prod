@@ -185,6 +185,8 @@ export default function DashboardForm() {
   const toolJsonRef = useRef<HTMLTextAreaElement>(null)
   const [genLoading, setGenLoading] = useState(false)
   const [generated, setGenerated] = useState<null | { secret: string; sipUri: string; twimlProd: string; twimlLocal: string; expiresAt?: number }>(null)
+  const [includeServerWebhook, setIncludeServerWebhook] = useState(false)
+  const [serverSecret, setServerSecret] = useState('')
 
   const addTool = () => {
     try {
@@ -263,7 +265,8 @@ export default function DashboardForm() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || `Failed: ${res.status}`)
+        const msg = err?.error?.message || err?.error || err?.message || `Failed: ${res.status}`
+        throw new Error(msg)
       }
       const json = await res.json()
       toast.success('Call initiated')
@@ -300,7 +303,11 @@ export default function DashboardForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expires_after: { anchor: 'created_at', seconds: v.expiresSeconds }, session })
       })
-      if (!res.ok) throw new Error('Failed to generate token')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        const msg = err?.error?.message || err?.error || err?.message || `Failed: ${res.status}`
+        throw new Error(msg)
+      }
       const json = await res.json()
       const secret: string | undefined = json?.client_secret?.value
       if (!secret) throw new Error('No secret returned')
@@ -309,7 +316,43 @@ export default function DashboardForm() {
         // Using subprotocol for browser-based auth with ephemeral secrets
         `openai-insecure-api-key.${secret}`
       ])
-      ws.onopen = () => toast.success('WebSocket connected')
+      ws.onopen = () => {
+        toast.success('WebSocket connected')
+        // Build a compliant session.update payload (omit fields not supported by client_secrets)
+        const update: any = {
+          type: 'session.update',
+          session: {}
+        }
+        // Allow-list typical realtime session fields for session.update
+        update.session.instructions = session.instructions
+        update.session.voice = session.voice
+        update.session.modalities = session.modalities
+        update.session.tool_choice = session.tool_choice
+        if (Array.isArray(session.tools) && session.tools.length > 0) {
+          update.session.tools = session.tools
+        }
+        if (typeof session.temperature === 'number') {
+          update.session.temperature = session.temperature
+        }
+        if (session.max_output_tokens !== 'inf' && typeof session.max_output_tokens === 'number') {
+          update.session.max_output_tokens = session.max_output_tokens
+        }
+        if (session.turn_detection && session.turn_detection.type === 'server_vad') {
+          update.session.turn_detection = session.turn_detection
+        } else {
+          update.session.turn_detection = { type: 'none' }
+        }
+        if (session.input_audio_format) {
+          update.session.input_audio_format = session.input_audio_format
+        }
+        if (session.transcription && session.transcription.enabled) {
+          update.session.transcription = session.transcription
+        }
+        if (session.noise_reduction) {
+          update.session.noise_reduction = session.noise_reduction
+        }
+        try { ws.send(JSON.stringify(update)) } catch {}
+      }
       ws.onclose = () => toast('WebSocket closed')
       ws.onerror = (e) => {
         console.error('WS error', e)
@@ -346,11 +389,17 @@ export default function DashboardForm() {
         embedded_media: []
       }
       const body: any = { expires_after: { anchor: 'created_at', seconds: v.expiresSeconds }, session }
+      if (includeServerWebhook) {
+        const serverUrlProd = `https://verbio.app/api/realtime/control`
+        body.server = { url: serverUrlProd }
+        if (serverSecret) body.server.secret = serverSecret
+      }
       if (v.openaiApiKey) body.openaiApiKey = v.openaiApiKey
       const res = await fetch('/api/realtime-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || 'Failed to generate token')
+        const msg = err?.error?.message || err?.error || err?.message || 'Failed to generate token'
+        throw new Error(msg)
       }
       const json = await res.json()
       const secret: string | undefined = json?.client_secret?.value
@@ -534,6 +583,24 @@ export default function DashboardForm() {
           <Button type="button" onClick={generateClientSecret} disabled={genLoading} className="bg-brand-600 hover:bg-brand-500">
             {genLoading ? 'Generating…' : 'Generate Client Secret'}
           </Button>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Server Control Webhook (optional)</label>
+            <div className="flex items-center gap-3">
+              <button type="button" role="switch" aria-checked={includeServerWebhook} onClick={() => setIncludeServerWebhook((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${includeServerWebhook ? 'bg-brand-600' : 'bg-neutral-700'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${includeServerWebhook ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+              <span className="text-sm text-neutral-400">Include in client secret (beta)</span>
+            </div>
+            <p className="mt-1 text-xs text-neutral-500">URL (prod): https://verbio.app/api/realtime/control</p>
+            <p className="mt-1 text-xs text-neutral-500">URL (this host): {typeof window !== 'undefined' ? `${window.location.origin}/api/realtime/control` : ''}</p>
+          </div>
+          {includeServerWebhook && (
+            <div>
+              <Input label="Server Webhook Secret (optional)" placeholder="secret for Authorization: Bearer" value={serverSecret} onChange={(e) => setServerSecret(e.target.value)} />
+            </div>
+          )}
         </div>
         {generated && (
           <div className="mt-4 space-y-3 rounded-lg border border-neutral-800 bg-neutral-950/60 p-4">

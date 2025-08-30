@@ -5,16 +5,13 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   // Deep clone to avoid mutating caller input
   const body: any = JSON.parse(JSON.stringify(payload))
   const s = body.session || {}
-  if (s && s.max_output_tokens === 'inf') {
-    delete s.max_output_tokens
+  // Whitelist only fields that the client_secrets endpoint accepts.
+  const allowed = new Set(['type', 'model', 'instructions'])
+  const filtered: Record<string, any> = {}
+  for (const k of Object.keys(s)) {
+    if (allowed.has(k)) filtered[k] = s[k]
   }
-  if (s && Array.isArray(s.embedded_media) && s.embedded_media.length === 0) {
-    delete s.embedded_media
-  }
-  if (s && s.transcription && (s.transcription.enabled === false || s.transcription.enabled === undefined)) {
-    delete s.transcription
-  }
-  body.session = s
+  body.session = filtered
   return body
 }
 
@@ -26,7 +23,8 @@ export async function createEphemeralClientSecret(apiKey: string, payload: Ephem
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'realtime=v1'
       },
       timeout: 15000
     }

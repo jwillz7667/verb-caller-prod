@@ -55,7 +55,11 @@ export const EphemeralRequestSchema = z.object({
     anchor: z.enum(['created_at']).default('created_at'),
     seconds: z.number().int().min(60).max(3600).default(600)
   }),
-  session: RealtimeSessionSchema
+  session: RealtimeSessionSchema,
+  server: z.object({
+    url: z.string().url(),
+    secret: z.string().optional()
+  }).optional()
 })
 
 export const OutgoingCallSchema = z.object({
@@ -72,4 +76,3 @@ export type ToolDef = z.infer<typeof ToolSchema>
 export type RealtimeSession = z.infer<typeof RealtimeSessionSchema>
 export type EphemeralRequest = z.infer<typeof EphemeralRequestSchema>
 export type OutgoingCallRequest = z.infer<typeof OutgoingCallSchema>
-
