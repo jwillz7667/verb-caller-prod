@@ -7,6 +7,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const secret = searchParams.get('secret')
   const sipDomain = 'sip.openai.com'
+  // Allow toggling scheme/transport/port for interoperability testing
+  const scheme = (searchParams.get('scheme') || 'sip').toLowerCase() // 'sip' | 'sips'
+  const transport = (searchParams.get('transport') || 'tls').toLowerCase() // 'tls' | 'tcp' | 'udp'
+  const portParam = searchParams.get('port')
+  const port = portParam && /^[0-9]{2,5}$/.test(portParam) ? portParam : ''
   if (!secret) {
     return new Response('<Response><Say>Missing secret.</Say></Response>', {
       status: 400,
@@ -41,8 +46,15 @@ export async function GET(req: NextRequest) {
       return new Response('<Response><Say>Forbidden</Say></Response>', { status: 403, headers: { 'Content-Type': 'text/xml' } })
     }
   }
-  // Use TLS via the sips: scheme (Twilio best practice)
-  const sipUri = `sips:${secret}@${sipDomain}`
+  // Compose target URI
+  let sipUri: string
+  if (scheme === 'sips') {
+    // TLS implied; Twilio defaults to 5061 if port omitted
+    sipUri = `sips:${secret}@${sipDomain}${port ? `:${port}` : ''}`
+  } else {
+    // Default to SIP over TLS via transport param
+    sipUri = `sip:${secret}@${sipDomain}${port ? `:${port}` : ''};transport=${transport}`
+  }
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${sipUri}</Sip>\n  </Dial>\n</Response>`
   return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
 }
