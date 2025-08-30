@@ -187,6 +187,13 @@ export default function DashboardForm() {
   const [generated, setGenerated] = useState<null | { secret: string; sipUri: string; twimlProd: string; twimlLocal: string; expiresAt?: number }>(null)
   const [includeServerWebhook, setIncludeServerWebhook] = useState(false)
   const [serverSecret, setServerSecret] = useState('')
+  const [hostOrigin, setHostOrigin] = useState('')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setHostOrigin(window.location.origin)
+    }
+  }, [])
 
   const addTool = () => {
     try {
@@ -594,7 +601,10 @@ export default function DashboardForm() {
               <span className="text-sm text-neutral-400">Include in client secret (beta)</span>
             </div>
             <p className="mt-1 text-xs text-neutral-500">URL (prod): https://verbio.app/api/realtime/control</p>
-            <p className="mt-1 text-xs text-neutral-500">URL (this host): {typeof window !== 'undefined' ? `${window.location.origin}/api/realtime/control` : ''}</p>
+            <p className="mt-1 text-xs text-neutral-500">URL (this host): {hostOrigin ? `${hostOrigin}/api/realtime/control` : '—'}</p>
+            {includeServerWebhook && (
+              <p className="mt-1 text-xs text-amber-400">Note: Some accounts reject the top-level "server" parameter during token minting. We still generate the secret; configure server-side control out-of-band if needed.</p>
+            )}
           </div>
           {includeServerWebhook && (
             <div>

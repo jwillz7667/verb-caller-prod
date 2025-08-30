@@ -4,15 +4,18 @@ import type { EphemeralRequest } from './validation'
 function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   // Deep clone to avoid mutating caller input
   const body: any = JSON.parse(JSON.stringify(payload))
+  const allowedSession = new Set(['type', 'model', 'instructions'])
   const s = body.session || {}
-  // Whitelist only fields that the client_secrets endpoint accepts.
-  const allowed = new Set(['type', 'model', 'instructions'])
-  const filtered: Record<string, any> = {}
+  const filteredSession: Record<string, any> = {}
   for (const k of Object.keys(s)) {
-    if (allowed.has(k)) filtered[k] = s[k]
+    if (allowedSession.has(k)) filteredSession[k] = s[k]
   }
-  body.session = filtered
-  return body
+  // Only keep top-level fields allowed by the endpoint
+  const cleaned: any = {
+    expires_after: body.expires_after,
+    session: filteredSession,
+  }
+  return cleaned
 }
 
 export async function createEphemeralClientSecret(apiKey: string, payload: EphemeralRequest) {
