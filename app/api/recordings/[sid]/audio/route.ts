@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { getTwilioClient } from '@/lib/twilio'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(req: NextRequest, { params }: { params: { sid: string } }) {
   try {
@@ -19,4 +21,3 @@ export async function GET(req: NextRequest, { params }: { params: { sid: string 
     return new Response('Error', { status: 500 })
   }
 }
-
