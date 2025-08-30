@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
+import { verifyHmacSignature } from '@/lib/webhooks'
 
 export const runtime = 'nodejs'
 
@@ -14,11 +15,24 @@ function verifySecret(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifySecret(req)) {
+  // Read raw body for signature verification
+  const raw = await req.text()
+  const body = raw ? JSON.parse(raw) : {}
+
+  // AuthZ: Accept either Bearer shared secret or HMAC signature if configured
+  const hasBearerOk = verifySecret(req)
+  let hasHmacOk = true
+  const signingSecret = process.env.REALTIME_CONTROL_SIGNING_SECRET
+  if (signingSecret) {
+    const sig = req.headers.get('x-openai-signature') || req.headers.get('x-openai-signature-256')
+    const ts = req.headers.get('x-openai-signature-timestamp') || req.headers.get('x-openai-timestamp')
+    const tol = parseInt(process.env.REALTIME_CONTROL_TOLERANCE_SECONDS || '300', 10)
+    hasHmacOk = verifyHmacSignature({ rawBody: raw, signature: sig, secret: signingSecret, timestamp: ts, toleranceSeconds: Number.isFinite(tol) ? tol : 300 })
+  }
+  if (!hasBearerOk && !hasHmacOk) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    const body = await req.json().catch(() => ({}))
     // Log the incoming event minimally
     console.log('Realtime control webhook event:', body?.type || body?.event?.type || 'unknown')
 
@@ -36,4 +50,3 @@ export async function GET() {
   const update = buildServerUpdateFromEnv()
   return Response.json({ ok: true, update })
 }
-

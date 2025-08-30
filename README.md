@@ -38,6 +38,13 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
   ```
   If you receive "unknown parameter" errors when including `server`, omit it and manage settings via WebSocket `session.update` instead.
 
+#### HMAC Signature (optional)
+- Enable verification: set `REALTIME_CONTROL_SIGNING_SECRET`.
+- Incoming headers expected (if provided by OpenAI):
+  - `x-openai-signature` or `x-openai-signature-256`
+  - `x-openai-signature-timestamp` (or `x-openai-timestamp`)
+- Verification: HMAC-SHA256 over `timestamp + '.' + rawBody` (or rawBody if no timestamp), compared in constant time against the provided signature (hex or base64). Timestamp tolerance configurable via `REALTIME_CONTROL_TOLERANCE_SECONDS` (default 300s).
+
 ## Environment
 - `OPENAI_API_KEY`: Server-side key used to mint ephemeral client secrets.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: Twilio credentials.
