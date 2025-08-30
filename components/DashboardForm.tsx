@@ -311,11 +311,14 @@ export default function DashboardForm() {
         body: JSON.stringify({ expires_after: { anchor: 'created_at', seconds: v.expiresSeconds }, session })
       })
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
+        const txt = await res.text()
+        let err: any = {}
+        try { err = txt ? JSON.parse(txt) : {} } catch {}
         const msg = err?.error?.message || err?.error || err?.message || `Failed: ${res.status}`
         throw new Error(msg)
       }
-      const json = await res.json()
+      const txt = await res.text()
+      const json = txt ? JSON.parse(txt) : {}
       const secret: string | undefined = json?.client_secret?.value
       if (!secret) throw new Error('No secret returned')
       const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(session.model)}`
@@ -404,11 +407,14 @@ export default function DashboardForm() {
       if (v.openaiApiKey) body.openaiApiKey = v.openaiApiKey
       const res = await fetch('/api/realtime-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
+        const txt = await res.text()
+        let err: any = {}
+        try { err = txt ? JSON.parse(txt) : {} } catch {}
         const msg = err?.error?.message || err?.error || err?.message || 'Failed to generate token'
         throw new Error(msg)
       }
-      const json = await res.json()
+      const txt2 = await res.text()
+      const json = txt2 ? JSON.parse(txt2) : {}
       const secret: string | undefined = json?.client_secret?.value
       const expiresAt: number | undefined = json?.client_secret?.expires_at
       if (!secret) throw new Error('No secret in response')

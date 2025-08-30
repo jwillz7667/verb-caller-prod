@@ -12,7 +12,10 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY || body.openaiApiKey
     if (!apiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
     const token = await createEphemeralClientSecret(apiKey, parsed.data)
-    return Response.json(token)
+    if (!token || !token.client_secret || !token.client_secret.value) {
+      return Response.json({ error: 'No client_secret returned from OpenAI' }, { status: 502 })
+    }
+    return Response.json({ client_secret: token.client_secret })
   } catch (e: any) {
     const status = e?.response?.status || 500
     const detail = e?.response?.data || { error: e?.message || 'Internal error' }
