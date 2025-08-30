@@ -6,11 +6,17 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+logs/
+*.pid
+*.pid.lock
+pids/
 
 # Next.js
 .next/
 out/
 .vercel/
+.turbo/
+.cache/
 
 # Env files (keep example only)
 .env
@@ -23,13 +29,40 @@ build/
 
 # Tests
 coverage/
+.nyc_output/
+.jest-cache/
+.jest-test-results.json
+playwright-report/
+test-results/
+cypress/screenshots/
+cypress/videos/
 
 # Editors/OS
 .DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+Thumbs.db
 .idea/
 .vscode/
 *.swp
+*.swo
+*.tmp
+*.orig
 
 # TypeScript
 *.tsbuildinfo
 
+# Linters/formatters caches
+.eslintcache
+.stylelintcache
+
+# Large local docs and binaries (avoid >100MB push issues)
+realtime-docs/
+
+# Lockfiles (recommended to keep tracked). Uncomment to ignore if desired.
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+# bun.lockb

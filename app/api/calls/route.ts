@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       to: data.toNumber,
       from,
       url: twimlUrl,
+      method: 'GET',
     }
     if (data.record) {
       callCreatePayload.record = true

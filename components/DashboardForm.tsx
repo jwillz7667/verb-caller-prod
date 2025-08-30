@@ -407,7 +407,7 @@ export default function DashboardForm() {
       const secret: string | undefined = json?.client_secret?.value
       const expiresAt: number | undefined = json?.client_secret?.expires_at
       if (!secret) throw new Error('No secret in response')
-      const sipUri = `sip:${secret}@sip.openai.com`
+      const sipUri = `sips:${secret}@sip.openai.com`
       const twimlProd = `https://verbio.app/api/twiml?secret=${encodeURIComponent(secret)}`
       const twimlLocal = `${window.location.origin}/api/twiml?secret=${encodeURIComponent(secret)}`
       setGenerated({ secret, sipUri, twimlProd, twimlLocal, expiresAt })

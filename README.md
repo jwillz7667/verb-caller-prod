@@ -22,6 +22,7 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 ### Incoming Calls
 - Generate a client secret via Realtime API (button to be added) or use the outgoing call flow to see a generated secret value in logs.
 - Configure your Twilio phone number Voice webhook (Incoming Call) to: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`
+  The TwiML returned uses `sips:` to route over TLS to OpenAI SIP.
 
 ### Server-Side Control (Optional)
 - Endpoint: `POST https://YOUR_DOMAIN/api/realtime/control`
