@@ -4,6 +4,7 @@ import { OutgoingCallSchema } from '@/lib/validation'
 import { createEphemeralClientSecret } from '@/lib/openai'
 import { getTwilioClient, getTwilioFromNumber } from '@/lib/twilio'
 import { resolveBaseUrl } from '@/lib/utils'
+import { allowClientCredsServer } from '@/lib/config'
 
 export const runtime = 'nodejs'
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
     const data = parsed.data
 
-    const openaiKey = data.openaiApiKey || process.env.OPENAI_API_KEY
+    const openaiKey = allowClientCredsServer() ? (data.openaiApiKey || process.env.OPENAI_API_KEY) : process.env.OPENAI_API_KEY
     if (!openaiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
 
     // Create ephemeral client secret
@@ -24,8 +25,10 @@ export async function POST(req: NextRequest) {
     const secretVal = eph.client_secret.value
 
     // Create outbound call via Twilio
-    const client = getTwilioClient({ sid: data.twilioAccountSid, token: data.twilioAuthToken })
-    const from = getTwilioFromNumber(data.twilioFromNumber)
+    const client = allowClientCredsServer()
+      ? getTwilioClient({ sid: data.twilioAccountSid, token: data.twilioAuthToken })
+      : getTwilioClient()
+    const from = allowClientCredsServer() ? getTwilioFromNumber(data.twilioFromNumber) : getTwilioFromNumber()
     if (!from) return Response.json({ error: 'Twilio from number missing' }, { status: 400 })
 
     const base = resolveBaseUrl(req.url)

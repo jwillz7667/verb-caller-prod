@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { EphemeralRequestSchema } from '@/lib/validation'
 import { createEphemeralClientSecret } from '@/lib/openai'
+import { allowClientCredsServer } from '@/lib/config'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const parsed = EphemeralRequestSchema.safeParse(body)
     if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 })
-    const apiKey = process.env.OPENAI_API_KEY || body.openaiApiKey
+    const apiKey = allowClientCredsServer() ? (process.env.OPENAI_API_KEY || body.openaiApiKey) : process.env.OPENAI_API_KEY
     if (!apiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
     const token = await createEphemeralClientSecret(apiKey, parsed.data)
     if (!token || !token.client_secret || !token.client_secret.value) {
