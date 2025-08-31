@@ -264,6 +264,11 @@ export async function GET(request: Request) {
   twilioWS.addEventListener('error', () => { safeClose() })
 
   // Return the accept response for the WebSocket
+  // Echo back Sec-WebSocket-Protocol if provided (Twilio uses 'audio') to satisfy subprotocol negotiation
+  const reqProto = request.headers.get('sec-websocket-protocol') || ''
+  const chosenProto = reqProto.split(',').map((s) => s.trim()).filter(Boolean)[0]
+  const headers = new Headers()
+  if (chosenProto) headers.set('Sec-WebSocket-Protocol', chosenProto)
   // @ts-ignore - Edge web standard response
-  return new Response(null, { status: 101, webSocket: clientWS })
+  return new Response(null, { status: 101, webSocket: clientWS, headers })
 }
