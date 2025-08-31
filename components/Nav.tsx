@@ -1,5 +1,6 @@
 "use client"
 import Link from 'next/link'
+import type { Route } from 'next'
 import { PhoneCall, History, Bot } from 'lucide-react'
 
 export default function Nav() {
@@ -17,7 +18,7 @@ export default function Nav() {
           <Link href="/history" className="flex items-center gap-2 hover:text-white">
             <History className="h-4 w-4" /> Recordings
           </Link>
-          <Link href="/logs" className="hidden items-center gap-2 hover:text-white sm:flex">
+          <Link href={'/logs' as Route} className="hidden items-center gap-2 hover:text-white sm:flex">
             <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Logs
           </Link>
           <a
