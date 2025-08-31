@@ -73,7 +73,13 @@ export async function GET(req: NextRequest) {
     }
   }
   if (mode === 'stream') {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Start>\n    <Stream url="wss://${new URL(req.url).host}/api/stream/twilio" />\n  </Start>\n  <Pause length="3600"/>\n</Response>`
+    const u = new URL(req.url)
+    const base = (process.env.PUBLIC_BASE_URL || `${u.protocol}//${u.host}`).replace(/\/$/, '')
+    const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+    const streamUrl = `${wsBase}/api/stream/twilio`
+    const statusCb = process.env.TWILIO_STREAM_STATUS_CALLBACK_URL
+    const statusAttr = statusCb ? ` statusCallback=\"${statusCb}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
+    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${streamUrl}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
     return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
   }
 
