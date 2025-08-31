@@ -103,6 +103,9 @@ export async function GET(request: Request) {
   let pendingPcm: Int16Array[] = []
   let vadEnabled = true
   let callSid = ''
+  let lastAssistantItem: string | null = null
+  let responseStartTimestamp: number | null = null
+  let latestMediaTimestamp: number | null = null
 
   async function ensureOpenAI(model: string, instructions?: string, prompt?: { id: string; version?: string }) {
     if (oaiWS) return
@@ -146,17 +149,21 @@ export async function GET(request: Request) {
       oaiReady = true
       // Configure session for audio using env-driven best practices
       const update = buildServerUpdateFromEnv()
+      // Force g711_ulaw passthrough for Twilio compatibility
+      try {
+        ;(update as any).session = {
+          ...(update as any).session,
+          modalities: ['audio', 'text'],
+          input_audio_format: 'g711_ulaw',
+          output_audio_format: 'g711_ulaw',
+        }
+      } catch {}
       try { oaiWS!.send(JSON.stringify(update)) } catch {}
       try {
         const t = (update as any)?.session?.turn_detection?.type
         vadEnabled = t !== 'none'
       } catch {}
-      // Flush any buffered audio
-      if (pendingPcm.length > 0) {
-        const merged = concatInt16(pendingPcm)
-        pendingPcm = []
-        sendPcmToOpenAI(merged)
-      }
+      // No PCM buffering in passthrough mode
     })
     oaiWS.addEventListener('message', (ev) => {
       try {
@@ -189,6 +196,12 @@ export async function GET(request: Request) {
     if (!oaiWS || !oaiReady) { pendingPcm.push(pcm24k); return }
     const u8 = int16ToUint8LE(pcm24k)
     const b64 = uint8ToBase64(u8)
+    const append = { type: 'input_audio_buffer.append', audio: b64 }
+    try { oaiWS.send(JSON.stringify(append)) } catch {}
+  }
+
+  function sendBase64ToOpenAI(b64: string) {
+    if (!oaiWS || !oaiReady) return
     const append = { type: 'input_audio_buffer.append', audio: b64 }
     try { oaiWS.send(JSON.stringify(append)) } catch {}
   }
@@ -233,14 +246,18 @@ export async function GET(request: Request) {
   async function handleOAIMessage(msg: any) {
     // Handle audio deltas from OpenAI; event names may vary by model version
     // Try response.output_audio.delta first, then response.audio.delta
-    if (msg.type === 'response.output_audio.delta' && msg.audio) {
-      const u8 = base64ToUint8(msg.audio)
-      const pcm = uint8ToInt16LE(u8)
-      enqueuePlayback(pcm)
-    } else if (msg.type === 'response.audio.delta' && msg.delta) {
-      const u8 = base64ToUint8(msg.delta)
-      const pcm = uint8ToInt16LE(u8)
-      enqueuePlayback(pcm)
+    if (msg.type === 'response.audio.delta' && msg.delta) {
+      // Forward g711 μ-law audio back to Twilio as-is
+      const payload = msg.delta as string
+      if (responseStartTimestamp == null && latestMediaTimestamp != null) {
+        responseStartTimestamp = latestMediaTimestamp
+      }
+      if (typeof msg.item_id === 'string') {
+        lastAssistantItem = msg.item_id
+      }
+      const out = { event: 'media', streamSid, media: { payload } }
+      try { twilioWS.send(JSON.stringify(out)) } catch {}
+      try { twilioWS.send(JSON.stringify({ event: 'mark', streamSid })) } catch {}
     } else if (msg.type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
       const text = msg.delta as string
       const key = callSid || streamSid
@@ -249,12 +266,23 @@ export async function GET(request: Request) {
       const text = msg.delta as string
       const key = callSid || streamSid
       try { await publishTranscript(key, { t: Date.now(), type: 'text.delta', text }) } catch {}
-    } else if (
-      msg.type === 'input_audio_buffer.speech_started' ||
-      msg.type === 'response.created'
-    ) {
-      // Barge-in: stop any queued playback when user begins speaking or new response lifecycle starts
+    } else if (msg.type === 'input_audio_buffer.speech_started') {
+      // Barge-in: clear Twilio playback and truncate any in-flight assistant audio
       clearPlaybackQueue()
+      try { twilioWS.send(JSON.stringify({ event: 'clear', streamSid })) } catch {}
+      if (lastAssistantItem && responseStartTimestamp != null && latestMediaTimestamp != null) {
+        const audio_end_ms = Math.max(0, latestMediaTimestamp - responseStartTimestamp)
+        try {
+          oaiWS?.send(JSON.stringify({
+            type: 'conversation.item.truncate',
+            item_id: lastAssistantItem,
+            content_index: 0,
+            audio_end_ms,
+          }))
+        } catch {}
+      }
+      lastAssistantItem = null
+      responseStartTimestamp = null
     }
   }
 
@@ -283,17 +311,15 @@ export async function GET(request: Request) {
           try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.clear' })) } catch {}
         }
       } else if (data.event === 'media') {
-        // Incoming mu-law 8k audio from Twilio
+        // Incoming μ-law 8k base64 audio from Twilio; forward to OpenAI
         const b64 = data.media.payload as string
-        const ulaw = base64ToUint8(b64)
-        const pcm8 = muLawDecode(ulaw)
-        const pcm24 = resamplePCM16(pcm8, 8000, 24000)
+        latestMediaTimestamp = (data?.media?.timestamp as number) ?? latestMediaTimestamp
         // Barge-in: If TTS is playing, cancel current response and clear buffer
         if (oaiWS && oaiReady) {
           try { oaiWS.send(JSON.stringify({ type: 'response.cancel' })) } catch {}
         }
         clearPlaybackQueue()
-        sendPcmToOpenAI(pcm24)
+        sendBase64ToOpenAI(b64)
       } else if (data.event === 'mark' && data.mark?.name === 'commit') {
         if (oaiWS && oaiReady) {
           try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' })) } catch {}
