@@ -357,6 +357,10 @@ export async function GET(request: Request) {
   return new Response(null, { status: 101, webSocket: clientWS, headers })
 }
 
+export async function HEAD() {
+  return new Response(null, { status: 204 })
+}
+
 // Simple in-memory log fanout for debug clients
 const logSockets: Set<WebSocket> = (globalThis as any).__logSockets || new Set()
 ;(globalThis as any).__logSockets = logSockets
