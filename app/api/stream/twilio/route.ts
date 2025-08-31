@@ -81,7 +81,8 @@ function uint8ToInt16LE(u8: Uint8Array): Int16Array {
 export async function GET(request: Request) {
   // Upgrade incoming request to a WebSocket (Twilio Media Streams client)
   const upgrade = (request.headers.get('upgrade') || '').toLowerCase()
-  if (upgrade !== 'websocket') {
+  const hasWsKey = !!request.headers.get('sec-websocket-key')
+  if (!(upgrade === 'websocket' || hasWsKey)) {
     // Be explicit for non-upgrade hits (browsers/health checks)
     return new Response('Expected WebSocket upgrade', {
       status: 426,
