@@ -455,72 +455,39 @@ export default function DashboardForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8">
-      <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-        <h2 className="mb-2 text-lg font-semibold">Credentials</h2>
-        <p className="text-sm text-neutral-400">Server-managed. Configure env vars in Vercel: OPENAI_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.</p>
-      </section>
-
-      <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-        <h2 className="mb-4 text-lg font-semibold">Realtime Session</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Controller
-            control={form.control}
-            name="model"
-            render={({ field }) => (
-              <Select label="Model" options={[
-                { label: 'gpt-realtime', value: 'gpt-realtime' },
-                { label: 'gpt-4o-realtime-preview', value: 'gpt-4o-realtime-preview' },
-              ]} value={field.value} onChange={field.onChange} />
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="voice"
-            render={({ field }) => (
-              <Select label="Voice" options={[
-                'alloy','echo','fable','onyx','nova','shimmer'
-              ].map(v => ({ label: v, value: v }))} value={field.value} onChange={field.onChange} />
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="tool_choice"
-            render={({ field }) => (
-              <Select label="Tool Choice" options={['auto','required','none'].map(v => ({label:v, value:v}))} value={field.value} onChange={field.onChange} />
-            )}
-          />
+    <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-[320px,1fr]">
+      {/* Sidebar: Settings (Playground-like) */}
+      <aside className="sticky top-[76px] h-[calc(100vh-120px)] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-300">Settings</h2>
+          <div className="flex items-center gap-2">
+            <Button type="button" className="px-3 py-1 text-xs" onClick={onSavePreset}>Save</Button>
+            <Button type="button" className="px-3 py-1 text-xs" onClick={testWebSocket}>Test</Button>
+          </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-4">
+          <Controller control={form.control} name="model" render={({ field }) => (
+            <Select label="Model" options={[{label:'gpt-realtime', value:'gpt-realtime'},{label:'gpt-4o-realtime-preview', value:'gpt-4o-realtime-preview'}]} value={field.value} onChange={field.onChange} />
+          )} />
+          <Controller control={form.control} name="voice" render={({ field }) => (
+            <Select label="Voice" options={['alloy','echo','fable','onyx','nova','shimmer'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
+          )} />
+          <Controller control={form.control} name="tool_choice" render={({ field }) => (
+            <Select label="Tool Choice" options={['auto','required','none'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
+          )} />
           <div>
             <label className="mb-1 block text-sm text-neutral-300">Temperature: {form.watch('temperature')}</label>
             <input type="range" min={0} max={2} step={0.1} {...form.register('temperature', { valueAsNumber: true })} />
           </div>
-          <Input label="Max Output Tokens" placeholder="inf or number" {...form.register('max_output_tokens')} />
-          <Input label="Expires After Seconds" type="number" {...form.register('expiresSeconds', { valueAsNumber: true })} />
-        </div>
-        <div className="mt-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="md:col-span-3">
-              <Textarea label="Instructions (optional if using Prompt)" {...form.register('instructions')} defaultValue={defaultInstructions} />
-            </div>
-            <Input label="Prompt ID (optional)" placeholder="pmpt_..." {...form.register('promptId')} />
-            <Input label="Prompt Version (optional)" placeholder="e.g. 2" {...form.register('promptVersion')} />
+          <Input label="Max Tokens" placeholder="inf or number" {...form.register('max_output_tokens')} />
+          <Textarea label="Instructions" rows={5} {...form.register('instructions')} />
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Prompt ID" placeholder="pmpt_..." {...form.register('promptId')} />
+            <Input label="Version" placeholder="2" {...form.register('promptVersion')} />
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-xs text-neutral-500">Provide either Instructions or a Prompt ID.</p>
-            <Button type="button" onClick={onSavePreset}>Save Preset</Button>
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Controller
-            control={form.control}
-            name="turn_detection"
-            render={({ field }) => (
-              <Select label="Turn Detection" options={[{label:'none', value:'none'},{label:'server_vad', value:'server_vad'}]} value={field.value} onChange={field.onChange} />
-            )}
-          />
+          <Controller control={form.control} name="turn_detection" render={({ field }) => (
+            <Select label="Turn Detection" options={[{label:'server_vad', value:'server_vad'},{label:'none', value:'none'}]} value={field.value} onChange={field.onChange} />
+          )} />
           {form.watch('turn_detection') === 'server_vad' && (
             <>
               <div>
@@ -531,179 +498,129 @@ export default function DashboardForm() {
               <Input label="Silence Duration (ms)" type="number" {...form.register('vad_silence_duration_ms', { valueAsNumber: true })} />
             </>
           )}
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Controller
-            control={form.control}
-            name="noise_reduction"
-            render={({ field }) => (
-              <Select label="Noise Reduction" options={[{label:'near_field', value:'near_field'},{label:'none', value:'none'}]} value={field.value} onChange={field.onChange} />
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="input_audio_type"
-            render={({ field }) => (
-              <Select label="Input Audio Type" options={[{label:'audio/pcm', value:'audio/pcm'}]} value={field.value} onChange={field.onChange} />
-            )}
-          />
+          <Controller control={form.control} name="noise_reduction" render={({ field }) => (
+            <Select label="Noise Reduction" options={[{label:'near_field', value:'near_field'},{label:'none', value:'none'}]} value={field.value} onChange={field.onChange} />
+          )} />
           <Input label="Input Audio Rate" type="number" {...form.register('input_audio_rate', { valueAsNumber: true })} />
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Controller
-            control={form.control}
-            name="transcription_enabled"
-            render={({ field }) => (
-              <Toggle label="Transcription" checked={field.value} onChange={field.onChange} />
-            )}
-          />
+          <Controller control={form.control} name="transcription_enabled" render={({ field }) => (
+            <Toggle label="Transcription" checked={field.value} onChange={field.onChange} />
+          )} />
           {form.watch('transcription_enabled') && (
             <>
               <Input label="Transcription Model" {...form.register('transcription_model')} />
-              <Input label="Language (optional)" {...form.register('transcription_language')} />
-              <Input label="Prompt (optional)" {...form.register('transcription_prompt')} />
+              <Input label="Language" {...form.register('transcription_language')} />
+              <Input label="Prompt" {...form.register('transcription_prompt')} />
             </>
           )}
-        </div>
-
-        <div className="mt-6">
-          <label className="mb-1 block text-sm text-neutral-300">Tools (JSON Schema)</label>
-          <Textarea ref={toolJsonRef} placeholder='{"name":"search","description":"...","parameters":{"type":"object","properties":{"q":{"type":"string"}}}}' value={toolJson} onChange={(e) => setToolJson(e.target.value)} />
-          <div className="mt-2 flex gap-2">
-            <Button type="button" onClick={addTool}>Add Tool</Button>
-          </div>
-          {tools.length > 0 && (
-            <ul className="mt-3 divide-y divide-neutral-800 rounded-md border border-neutral-800">
-              {tools.map((t, i) => (
-                <li key={i} className="flex items-center justify-between gap-4 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{t.name}</p>
-                    <p className="truncate text-xs text-neutral-400">{t.description}</p>
-                  </div>
-                  <Button type="button" className="bg-red-500/20 hover:bg-red-500/30" onClick={() => removeTool(i)}>Remove</Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="mt-6">
-          <label className="mb-1 block text-sm text-neutral-300">Image Input (optional)</label>
-          <input type="file" multiple accept="image/*" onChange={(e) => form.setValue('imageFiles', e.target.files)} />
-          <p className="mt-1 text-xs text-neutral-500">Images will be embedded into the session as base64 (max 15MB total).</p>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-        <h2 className="mb-4 text-lg font-semibold">Call</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Input label="To Number (E.164)" placeholder="+1..." {...form.register('toNumber')} />
-          <Controller
-            control={form.control}
-            name="record"
-            render={({ field }) => (
-              <Toggle label="Record Call" checked={field.value} onChange={field.onChange} />
-            )}
-          />
-        </div>
-        <div className="mt-4 flex gap-3">
-          <Button type="submit" className="bg-brand-600 hover:bg-brand-500">Start Outgoing Call</Button>
-          <Button type="button" onClick={testWebSocket}>Test WebSocket Fallback</Button>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
-        <h2 className="mb-2 text-lg font-semibold">Incoming Calls Setup</h2>
-        <p className="text-sm text-neutral-400">Simplest: set your Twilio number Voice webhook to <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml</code> (no secret). The server will mint a fresh ephemeral secret automatically and return TwiML that bridges to OpenAI SIP over TLS.</p>
-        <p className="mt-1 text-sm text-neutral-400">Advanced: you can still pre-generate a client secret and use <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml?secret=&lt;client_secret&gt;</code>.</p>
-        <div className="mt-4 flex gap-3">
-          <Button type="button" onClick={generateClientSecret} disabled={genLoading} className="bg-brand-600 hover:bg-brand-500">
-            {genLoading ? 'Generating…' : 'Generate Client Secret (optional)'}
-          </Button>
-          <div className="flex items-center gap-2">
-            <button type="button" role="switch" aria-checked={autoUpdateTwilio} onClick={() => setAutoUpdateTwilio((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${autoUpdateTwilio ? 'bg-brand-600' : 'bg-neutral-700'}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${autoUpdateTwilio ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-            <span className="text-sm text-neutral-400">Auto-update Twilio webhook</span>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm text-neutral-300">Server Control Webhook (optional)</label>
-            <div className="flex items-center gap-3">
-              <button type="button" role="switch" aria-checked={includeServerWebhook} onClick={() => setIncludeServerWebhook((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${includeServerWebhook ? 'bg-brand-600' : 'bg-neutral-700'}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${includeServerWebhook ? 'translate-x-6' : 'translate-x-1'}`} />
+            <label className="mb-1 block text-sm text-neutral-300">Tools (JSON Schema)</label>
+            <Textarea ref={toolJsonRef} placeholder='{"name":"search","description":"...","parameters":{"type":"object","properties":{"q":{"type":"string"}}}}' value={toolJson} onChange={(e) => setToolJson(e.target.value)} />
+            <div className="mt-2 flex gap-2"><Button type="button" className="px-3 py-1 text-xs" onClick={addTool}>Add Tool</Button></div>
+            {tools.length > 0 && (
+              <ul className="mt-3 divide-y divide-neutral-800 rounded-md border border-neutral-800">
+                {tools.map((t,i)=> (
+                  <li key={i} className="flex items-center justify-between gap-4 p-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{t.name}</p>
+                      <p className="truncate text-xs text-neutral-400">{t.description}</p>
+                    </div>
+                    <Button type="button" className="px-2 py-1 text-xs bg-red-500/20 hover:bg-red-500/30" onClick={() => removeTool(i)}>Remove</Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Attach Images (optional)</label>
+            <input type="file" multiple accept="image/*" onChange={(e) => form.setValue('imageFiles', e.target.files)} />
+          </div>
+          <div className="border-t border-neutral-800 pt-3">
+            <label className="mb-1 block text-sm text-neutral-300">Client Secret (optional)</label>
+            <Button type="button" onClick={generateClientSecret} disabled={genLoading} className="w-full bg-brand-600 hover:bg-brand-500">{genLoading ? 'Generating…' : 'Generate'}</Button>
+            <div className="mt-2 flex items-center gap-2">
+              <button type="button" role="switch" aria-checked={autoUpdateTwilio} onClick={() => setAutoUpdateTwilio((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${autoUpdateTwilio ? 'bg-brand-600' : 'bg-neutral-700'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${autoUpdateTwilio ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-              <span className="text-sm text-neutral-400">Include in client secret (beta)</span>
+              <span className="text-xs text-neutral-400">Auto-update Twilio webhook</span>
             </div>
-            <p className="mt-1 text-xs text-neutral-500">URL (prod): https://verbio.app/api/realtime/control</p>
-            <p className="mt-1 text-xs text-neutral-500">URL (this host): {hostOrigin ? `${hostOrigin}/api/realtime/control` : '—'}</p>
-            {includeServerWebhook && (
-              <p className="mt-1 text-xs text-amber-400">Note: Some accounts reject the top-level "server" parameter during token minting. We still generate the secret; configure server-side control out-of-band if needed.</p>
-            )}
-          </div>
-          {includeServerWebhook && (
-            <div>
-              <Input label="Server Webhook Secret (optional)" placeholder="secret for Authorization: Bearer" value={serverSecret} onChange={(e) => setServerSecret(e.target.value)} />
-            </div>
-          )}
-        </div>
-        {generated && (
-          <div className="mt-4 space-y-3 rounded-lg border border-neutral-800 bg-neutral-950/60 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-neutral-400">Client Secret</p>
-                <p className="truncate font-mono text-sm">{generated.secret}</p>
-              </div>
-              <CopyButton value={generated.secret} />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-neutral-400">SIP URI (PBX)</p>
-                <p className="truncate font-mono text-sm">{generated.sipUri}</p>
-              </div>
-              <CopyButton value={generated.sipUri} />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-neutral-400">Twilio Webhook (Prod)</p>
-                <p className="truncate font-mono text-sm">{generated.twimlProd}</p>
-              </div>
-              <CopyButton value={generated.twimlProd} />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-neutral-400">Twilio Webhook (This Host)</p>
-                <p className="truncate font-mono text-sm">{generated.twimlLocal}</p>
-              </div>
+            <div className="mt-2 space-y-2">
               <div className="flex items-center gap-2">
-                <CopyButton value={generated.twimlLocal} />
-                <Button type="button" disabled={twilioUpdating} onClick={async () => {
-                  try {
-                    setTwilioUpdating(true)
-                    const r = await fetch('/api/twilio/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: generated.secret }) })
-                    const txt = await r.text()
-                    const json = txt ? JSON.parse(txt) : {}
-                    if (!r.ok || !json?.ok) {
-                      const msg = json?.error || `Failed (${r.status})`
-                      throw new Error(msg)
-                    }
-                    toast.success('Twilio webhook updated')
-                  } catch (e: any) {
-                    toast.error(e?.message || 'Update failed')
-                  } finally {
-                    setTwilioUpdating(false)
-                  }
-                }}>{twilioUpdating ? 'Updating…' : 'Apply to Twilio'}</Button>
+                <button type="button" role="switch" aria-checked={includeServerWebhook} onClick={() => setIncludeServerWebhook((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${includeServerWebhook ? 'bg-brand-600' : 'bg-neutral-700'}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${includeServerWebhook ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-xs text-neutral-400">Attach server control webhook</span>
               </div>
+              <p className="text-[11px] text-neutral-500">Prod: https://verbio.app/api/realtime/control</p>
+              <p className="text-[11px] text-neutral-500">This Host: {hostOrigin ? `${hostOrigin}/api/realtime/control` : '—'}</p>
+              {includeServerWebhook && (
+                <Input label="Webhook Secret" placeholder="Authorization: Bearer" value={serverSecret} onChange={(e) => setServerSecret(e.target.value)} />
+              )}
             </div>
-            {generated.expiresAt && (
-              <p className="text-xs text-neutral-500">Expires at: {new Date(generated.expiresAt * 1000).toLocaleString()}</p>
+            {generated && (
+              <div className="mt-2 space-y-2 rounded-md border border-neutral-800 bg-neutral-950/60 p-2">
+                <p className="truncate font-mono text-[11px]"><span className="text-neutral-400">Client Secret: </span>{generated.secret}</p>
+                <p className="truncate font-mono text-[11px]"><span className="text-neutral-400">SIP: </span>{generated.sipUri}</p>
+                <p className="truncate font-mono text-[11px]"><span className="text-neutral-400">Twilio (prod): </span>{generated.twimlProd}</p>
+                <p className="truncate font-mono text-[11px]"><span className="text-neutral-400">Twilio (this): </span>{generated.twimlLocal}</p>
+                <div className="flex items-center justify-end gap-2">
+                  <CopyButton value={generated.twimlLocal} />
+                  <Button type="button" className="px-3 py-1 text-xs" disabled={twilioUpdating} onClick={async () => {
+                    try {
+                      setTwilioUpdating(true)
+                      const r = await fetch('/api/twilio/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: generated.secret }) })
+                      const txt = await r.text()
+                      const json = txt ? JSON.parse(txt) : {}
+                      if (!r.ok || !json?.ok) {
+                        const msg = json?.error || `Failed (${r.status})`
+                        throw new Error(msg)
+                      }
+                      toast.success('Twilio webhook updated')
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Update failed')
+                    } finally {
+                      setTwilioUpdating(false)
+                    }
+                  }}>{twilioUpdating ? 'Updating…' : 'Apply'}</Button>
+                </div>
+                {generated.expiresAt && (
+                  <p className="text-[11px] text-neutral-500">Expires: {new Date(generated.expiresAt * 1000).toLocaleString()}</p>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
+      </aside>
+
+      {/* Main: Live Call + Transcript */}
+      <section className="space-y-4">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Live Call</h2>
+          </div>
+          <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Input label="To (E.164)" placeholder="+15551234567" {...form.register('toNumber')} />
+            <Controller control={form.control} name="record" render={({ field }) => (
+              <Toggle label="Record" checked={field.value} onChange={field.onChange} />
+            )} />
+            <Input label="Expires (sec)" type="number" placeholder="600" {...form.register('expiresSeconds', { valueAsNumber: true })} />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" className="bg-brand-600 hover:bg-brand-500">Start Outgoing Call</Button>
+            <Button type="button" onClick={testWebSocket}>Test WS</Button>
+          </div>
+        </div>
+
+        <div className="h-[56vh] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+          <h3 className="mb-2 text-sm font-medium text-neutral-300">Transcription</h3>
+          <div className="space-y-2 text-sm leading-relaxed">
+            <p className="text-neutral-500">Live transcription will appear here during an active call.</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+          <h2 className="mb-2 text-lg font-semibold">Incoming Calls Setup</h2>
+          <p className="text-sm text-neutral-400">Set your Twilio number Voice webhook to <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml</code>. The server mints a fresh ephemeral secret and bridges to OpenAI SIP over TLS.</p>
+        </div>
       </section>
     </form>
   )

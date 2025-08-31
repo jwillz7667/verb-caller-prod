@@ -12,10 +12,10 @@ export default function Nav() {
         </Link>
         <nav className="flex items-center gap-6 text-sm text-neutral-300">
           <Link href="/" className="flex items-center gap-2 hover:text-white">
-            <PhoneCall className="h-4 w-4" /> Dashboard
+            <PhoneCall className="h-4 w-4" /> Playground
           </Link>
           <Link href="/history" className="flex items-center gap-2 hover:text-white">
-            <History className="h-4 w-4" /> Call History
+            <History className="h-4 w-4" /> Recordings
           </Link>
           <a
             href="https://platform.openai.com/docs/guides/realtime"
@@ -30,4 +30,3 @@ export default function Nav() {
     </header>
   )
 }
-
