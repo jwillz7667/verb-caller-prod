@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 type Settings = {
   voice?: string
   tool_choice?: 'auto' | 'required' | 'none'
+  tools?: any[]
   modalities?: Array<'audio' | 'text'>
   temperature?: number
   max_output_tokens?: number | null
@@ -42,6 +43,7 @@ export default function ControlSettings() {
   const [s, setS] = useState<Settings>({
     voice: 'alloy',
     tool_choice: 'auto',
+    tools: [],
     modalities: ['audio'],
     temperature: 0.7,
     max_output_tokens: null,
@@ -85,6 +87,13 @@ export default function ControlSettings() {
 
   const isVad = s.turn_detection?.type === 'server_vad'
   const vad = (s.turn_detection as any) || {}
+  const [rawTools, setRawTools] = useState('')
+  useEffect(() => {
+    if (Array.isArray(s.tools)) {
+      try { setRawTools(JSON.stringify(s.tools, null, 2)) } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
@@ -159,6 +168,29 @@ export default function ControlSettings() {
           <Input label="Idle Timeout (ms, optional)" type="number" value={vad.idle_timeout_ms ?? ''} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', idle_timeout_ms: e.target.value ? parseInt(e.target.value, 10) : undefined } })} />
         </div>
       )}
+
+      <div className="mt-6">
+        <label className="mb-1 block text-sm text-neutral-300">Tools (raw JSON array)</label>
+        <textarea
+          className="h-40 w-full rounded-md border border-neutral-800 bg-neutral-950 p-2 font-mono text-xs text-white outline-none focus:border-brand-500"
+          placeholder='[ { "type":"mcp_server", "name":"filesystem", "server_url":"ws://localhost:8765", "tools":["read_file"] } ]'
+          value={rawTools}
+          onChange={(e) => setRawTools(e.target.value)}
+        />
+        <div className="mt-2 flex gap-2">
+          <Button type="button" onClick={() => {
+            try {
+              const parsed = rawTools ? JSON.parse(rawTools) : []
+              if (!Array.isArray(parsed)) throw new Error('Must be an array')
+              setS({ ...s, tools: parsed })
+              toast.success('Tools updated in memory')
+            } catch (e: any) {
+              toast.error(e?.message || 'Invalid JSON')
+            }
+          }}>Apply Tools</Button>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">These entries are passed as-is in session.update tools. Useful for MCP server tool calls.</p>
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Toggle label="Transcription" checked={!!s.transcription?.enabled} onChange={(v) => setS({ ...s, transcription: { ...(s.transcription || { model: 'gpt-4o-transcribe' }), enabled: v } })} />

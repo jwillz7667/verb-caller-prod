@@ -196,6 +196,8 @@ export default function DashboardForm() {
   const [tools, setTools] = useState<Array<{ name: string; description: string; parameters: any }>>([])
   const [toolJson, setToolJson] = useState('')
   const toolJsonRef = useRef<HTMLTextAreaElement>(null)
+  const [mcpJson, setMcpJson] = useState('')
+  const [mcpServers, setMcpServers] = useState<any[]>([])
   const [genLoading, setGenLoading] = useState(false)
   const [generated, setGenerated] = useState<null | { secret: string; sipUri: string; twimlProd: string; twimlLocal: string; expiresAt?: number }>(null)
   const [includeServerWebhook, setIncludeServerWebhook] = useState(false)
@@ -225,6 +227,18 @@ export default function DashboardForm() {
   }
 
   const removeTool = (idx: number) => setTools((t) => t.filter((_, i) => i !== idx))
+  const addMcp = () => {
+    try {
+      const parsed = mcpJson ? JSON.parse(mcpJson) : null
+      if (!parsed || typeof parsed !== 'object') throw new Error('Provide a JSON object for one MCP server')
+      setMcpServers((t) => [...t, parsed])
+      setMcpJson('')
+      toast.success('MCP server added')
+    } catch (e: any) {
+      toast.error(e?.message || 'Invalid MCP JSON')
+    }
+  }
+  const removeMcp = (idx: number) => setMcpServers((t) => t.filter((_, i) => i !== idx))
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
@@ -238,12 +252,13 @@ export default function DashboardForm() {
         }
       }
 
+      const allTools = [...tools, ...mcpServers]
       const session: RealtimeSession = {
         type: 'realtime',
         model: values.model,
         ...(values.instructions && values.instructions.trim().length > 0 ? { instructions: values.instructions } : {}),
         ...(values.promptId && values.promptId.trim().length > 0 ? { prompt: { id: values.promptId, ...(values.promptVersion && values.promptVersion.trim().length > 0 ? { version: values.promptVersion } : {}) } } : {}),
-        tools,
+        tools: allTools as any,
         tool_choice: values.tool_choice,
         temperature: values.temperature,
         max_output_tokens: values.max_output_tokens === 'inf' ? 'inf' : Number(values.max_output_tokens),
@@ -328,12 +343,13 @@ export default function DashboardForm() {
   const testWebSocket = async () => {
     try {
       const v = form.getValues()
+      const allTools = [...tools, ...mcpServers]
       const session: RealtimeSession = {
         type: 'realtime',
         model: v.model,
         ...(v.instructions && v.instructions.trim().length > 0 ? { instructions: v.instructions } : {}),
         ...(v.promptId && v.promptId.trim().length > 0 ? { prompt: { id: v.promptId, ...(v.promptVersion && v.promptVersion.trim().length > 0 ? { version: v.promptVersion } : {}) } } : {}),
-        tools,
+        tools: allTools as any,
         tool_choice: v.tool_choice,
         temperature: v.temperature,
         max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens),
@@ -579,6 +595,25 @@ export default function DashboardForm() {
                 ))}
               </ul>
             )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">MCP Servers (JSON)</label>
+            <Textarea placeholder='{"type":"mcp_server","name":"filesystem","server_url":"ws://localhost:8765","tools":["read_file","write_file"]}' value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} />
+            <div className="mt-2 flex gap-2"><Button type="button" className="px-3 py-1 text-xs" onClick={addMcp}>Add MCP</Button></div>
+            {mcpServers.length > 0 && (
+              <ul className="mt-3 divide-y divide-neutral-800 rounded-md border border-neutral-800">
+                {mcpServers.map((t,i)=> (
+                  <li key={i} className="flex items-center justify-between gap-4 p-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{t?.name || t?.server_url || t?.url || 'mcp'}</p>
+                      <p className="truncate text-xs text-neutral-400">{t?.type || 'mcp_server'}</p>
+                    </div>
+                    <Button type="button" className="px-2 py-1 text-xs bg-red-500/20 hover:bg-red-500/30" onClick={() => removeMcp(i)}>Remove</Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-1 text-[11px] text-neutral-500">Entries are passed-through to session.tools, enabling MCP server tool calls.</p>
           </div>
           <div>
             <label className="mb-1 block text-sm text-neutral-300">Attach Images (optional)</label>

@@ -11,6 +11,7 @@ type TurnDetectionVad = {
 export type RealtimeControlSettings = {
   voice?: string
   tool_choice?: 'auto' | 'required' | 'none'
+  tools?: any[]
   modalities?: Array<'audio' | 'text'>
   temperature?: number
   max_output_tokens?: number | null
@@ -107,6 +108,7 @@ export function buildServerUpdate() {
   const session: any = {}
   if (s.voice) session.voice = s.voice
   if (s.tool_choice) session.tool_choice = s.tool_choice
+  if (Array.isArray(s.tools) && s.tools.length > 0) session.tools = s.tools
   if (Array.isArray(s.modalities) && s.modalities.length > 0) session.modalities = s.modalities
   if (typeof s.temperature === 'number') session.temperature = s.temperature
   if (typeof s.max_output_tokens === 'number') session.max_output_tokens = s.max_output_tokens
