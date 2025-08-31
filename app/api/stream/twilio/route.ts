@@ -1,5 +1,6 @@
 export const runtime = 'edge'
 import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
+import { publishTranscript } from '@/lib/live'
 
 // Basic u-law (G.711) <-> PCM16 conversions
 function muLawDecode(u8: Uint8Array): Int16Array {
@@ -93,6 +94,7 @@ export async function GET(request: Request) {
   let closing = false
   let pendingPcm: Int16Array[] = []
   let vadEnabled = true
+  let callSid = ''
 
   async function ensureOpenAI(model: string, instructions?: string, prompt?: { id: string; version?: string }) {
     if (oaiWS) return
@@ -220,7 +222,7 @@ export async function GET(request: Request) {
     playbackTimer = setTimeout(sendNext, 0) as unknown as number
   }
 
-  function handleOAIMessage(msg: any) {
+  async function handleOAIMessage(msg: any) {
     // Handle audio deltas from OpenAI; event names may vary by model version
     // Try response.output_audio.delta first, then response.audio.delta
     if (msg.type === 'response.output_audio.delta' && msg.audio) {
@@ -231,6 +233,14 @@ export async function GET(request: Request) {
       const u8 = base64ToUint8(msg.delta)
       const pcm = uint8ToInt16LE(u8)
       enqueuePlayback(pcm)
+    } else if (msg.type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
+      const text = msg.delta as string
+      const key = callSid || streamSid
+      try { await publishTranscript(key, { t: Date.now(), type: 'audio_transcript.delta', text }) } catch {}
+    } else if (msg.type === 'response.text.delta' && typeof msg.delta === 'string') {
+      const text = msg.delta as string
+      const key = callSid || streamSid
+      try { await publishTranscript(key, { t: Date.now(), type: 'text.delta', text }) } catch {}
     } else if (
       msg.type === 'input_audio_buffer.speech_started' ||
       msg.type === 'response.created'
@@ -253,6 +263,7 @@ export async function GET(request: Request) {
       const data = JSON.parse(event.data as string)
       if (data.event === 'start') {
         streamSid = data.start.streamSid
+        callSid = data.start.callSid || ''
         try { console.log('[realtime] Twilio stream start', streamSid) } catch {}
         const model = (process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
         const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined

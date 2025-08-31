@@ -203,6 +203,9 @@ export default function DashboardForm() {
   const [hostOrigin, setHostOrigin] = useState('')
   const [autoUpdateTwilio, setAutoUpdateTwilio] = useState(false)
   const [twilioUpdating, setTwilioUpdating] = useState(false)
+  const [currentCallSid, setCurrentCallSid] = useState<string | null>(null)
+  const [transcript, setTranscript] = useState<Array<{ t: number; type: string; text: string }>>([])
+  const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -290,8 +293,32 @@ export default function DashboardForm() {
         throw new Error(msg)
       }
       const json = await res.json()
+      const callSid: string | undefined = json?.callSid
       toast.success('Call initiated')
       console.log('Call created:', json)
+      if (callSid) {
+        setCurrentCallSid(callSid)
+        // close previous
+        try { sseRef.current?.close() } catch {}
+        setTranscript([])
+        const es = new EventSource(`/api/live/${encodeURIComponent(callSid)}/sse`)
+        es.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data)
+            setTranscript((prev) => [...prev, data])
+          } catch {}
+        }
+        es.addEventListener('line', (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse((ev as any).data)
+            setTranscript((prev) => [...prev, data])
+          } catch {}
+        })
+        es.onerror = () => {
+          // keep UI soft-failing; user can restart
+        }
+        sseRef.current = es
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Failed to start call')
       console.error(e)
@@ -629,9 +656,15 @@ export default function DashboardForm() {
 
         <div className="h-[56vh] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
           <h3 className="mb-2 text-sm font-medium text-neutral-300">Transcription</h3>
-          <div className="space-y-2 text-sm leading-relaxed">
-            <p className="text-neutral-500">Live transcription will appear here during an active call.</p>
-          </div>
+          {transcript.length === 0 ? (
+            <p className="text-sm text-neutral-500">Live transcription will appear here during an active call.</p>
+          ) : (
+            <div className="space-y-2 text-sm leading-relaxed">
+              {transcript.map((l, i) => (
+                <p key={i} className="whitespace-pre-wrap"><span className="text-neutral-500">[{new Date(l.t).toLocaleTimeString()}]</span> {l.text}</p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
