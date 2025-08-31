@@ -1,22 +1,47 @@
 import { NextRequest } from 'next/server'
 import twilio from 'twilio'
+import { createEphemeralClientSecret } from '@/lib/openai'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const secret = searchParams.get('secret')
+  let secret = searchParams.get('secret') || ''
   const sipDomain = 'sip.openai.com'
   // Allow toggling scheme/transport/port for interoperability testing
   const scheme = (searchParams.get('scheme') || 'sip').toLowerCase() // 'sip' | 'sips'
   const transport = (searchParams.get('transport') || 'tls').toLowerCase() // 'tls' | 'tcp' | 'udp'
   const portParam = searchParams.get('port')
   const port = portParam && /^[0-9]{2,5}$/.test(portParam) ? portParam : ''
+  // If no secret is provided, mint one on the fly (automatic flow)
   if (!secret) {
-    return new Response('<Response><Say>Missing secret.</Say></Response>', {
-      status: 400,
-      headers: { 'Content-Type': 'text/xml' }
-    })
+    try {
+      const openaiKey = process.env.OPENAI_API_KEY
+      if (!openaiKey) {
+        return new Response('<Response><Say>Server not configured.</Say></Response>', { status: 500, headers: { 'Content-Type': 'text/xml' } })
+      }
+      const model = (searchParams.get('model') || process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
+      const promptId = searchParams.get('prompt_id') || undefined
+      const promptVersion = searchParams.get('prompt_version') || undefined
+      const instructions = searchParams.get('instructions') || process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
+      const expiresSeconds = parseInt(process.env.REALTIME_EXPIRES_SECONDS || '600', 10)
+      const payload: any = {
+        expires_after: { anchor: 'created_at', seconds: Number.isFinite(expiresSeconds) ? expiresSeconds : 600 },
+        session: { type: 'realtime', model }
+      }
+      if (instructions && instructions.trim().length > 0) payload.session.instructions = instructions
+      if (promptId) payload.session.prompt = { id: promptId, ...(promptVersion ? { version: promptVersion } : {}) }
+      const token = await createEphemeralClientSecret(openaiKey, payload)
+      secret = token?.client_secret?.value || ''
+      if (!secret) {
+        return new Response('<Response><Say>Failed to create token.</Say></Response>', { status: 502, headers: { 'Content-Type': 'text/xml' } })
+      }
+    } catch (e: any) {
+      console.error('TwiML mint secret error', e?.response?.data || e)
+      return new Response('<Response><Say>Error creating session.</Say></Response>', { status: 502, headers: { 'Content-Type': 'text/xml' } })
+    }
   }
   // Optional: verify Twilio signature in production
   const authToken = process.env.TWILIO_AUTH_TOKEN

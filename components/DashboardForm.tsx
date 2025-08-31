@@ -616,10 +616,11 @@ export default function DashboardForm() {
 
       <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
         <h2 className="mb-2 text-lg font-semibold">Incoming Calls Setup</h2>
-        <p className="text-sm text-neutral-400">Point your Twilio number Voice webhook to <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml?secret=&lt;client_secret&gt;</code>. Generate a client secret via the Realtime API and paste its value into the query param. The app responds with TwiML that bridges to OpenAI SIP.</p>
+        <p className="text-sm text-neutral-400">Simplest: set your Twilio number Voice webhook to <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml</code> (no secret). The server will mint a fresh ephemeral secret automatically and return TwiML that bridges to OpenAI SIP over TLS.</p>
+        <p className="mt-1 text-sm text-neutral-400">Advanced: you can still pre-generate a client secret and use <code className="rounded bg-neutral-900 px-2 py-1">/api/twiml?secret=&lt;client_secret&gt;</code>.</p>
         <div className="mt-4 flex gap-3">
           <Button type="button" onClick={generateClientSecret} disabled={genLoading} className="bg-brand-600 hover:bg-brand-500">
-            {genLoading ? 'Generating…' : 'Generate Client Secret'}
+            {genLoading ? 'Generating…' : 'Generate Client Secret (optional)'}
           </Button>
           <div className="flex items-center gap-2">
             <button type="button" role="switch" aria-checked={autoUpdateTwilio} onClick={() => setAutoUpdateTwilio((v) => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full ${autoUpdateTwilio ? 'bg-brand-600' : 'bg-neutral-700'}`}>

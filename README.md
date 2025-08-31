@@ -20,9 +20,9 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 - Fill the target `To` number in E.164 and click Start Outgoing Call.
 
 ### Incoming Calls
-- Generate a client secret via Realtime API (button to be added) or use the outgoing call flow to see a generated secret value in logs.
-- Configure your Twilio phone number Voice webhook (Incoming Call) to: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`
-  The TwiML returned uses `sips:` to route over TLS to OpenAI SIP.
+- Easiest: Set your Twilio phone number Voice webhook (Incoming Call) to: `https://YOUR_DOMAIN/api/twiml` (no secret). The app will mint a fresh ephemeral client secret on the fly and return TwiML that dials OpenAI SIP over TLS.
+- Advanced: You can still pre-generate a client secret and use: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`.
+  Optional tuning via query: `scheme=sip|sips`, `transport=tls|tcp|udp`, `port=5061`, `model=...`, `instructions=...`, `prompt_id=...`, `prompt_version=...`.
 
 ### Using Prompt References (optional)
 You can attach a prebuilt Prompt to the Realtime session when minting an ephemeral client secret by including a `session.prompt` object:

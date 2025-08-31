@@ -6,14 +6,19 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({})) as { secret?: string; phoneNumber?: string }
+    const body = await req.json().catch(() => ({})) as { secret?: string; phoneNumber?: string; scheme?: string; transport?: string; port?: string }
     const secret = body.secret
-    if (!secret) return Response.json({ error: 'Missing secret' }, { status: 400 })
     const client = getTwilioClient()
     const base = resolveBaseUrl(req.url)
     const phone = body.phoneNumber || getTwilioFromNumber()
     if (!phone) return Response.json({ error: 'Server TWILIO_FROM_NUMBER not configured and no phoneNumber provided' }, { status: 400 })
-    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secret)}`
+    const extra: string[] = []
+    if (body.scheme) extra.push(`scheme=${encodeURIComponent(body.scheme)}`)
+    if (body.transport) extra.push(`transport=${encodeURIComponent(body.transport)}`)
+    if (body.port) extra.push(`port=${encodeURIComponent(body.port)}`)
+    const query = secret ? `secret=${encodeURIComponent(secret)}` : ''
+    const qs = [query, ...extra].filter(Boolean).join('&')
+    const twimlUrl = `${base}/api/twiml${qs ? `?${qs}` : ''}`
 
     const nums = await client.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 20 })
     if (!nums || nums.length === 0) return Response.json({ error: `Twilio number not found: ${phone}` }, { status: 404 })
@@ -28,4 +33,3 @@ export async function POST(req: NextRequest) {
     return Response.json(detail, { status })
   }
 }
-
