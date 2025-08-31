@@ -107,6 +107,11 @@ export async function GET(request: Request) {
   let responseStartTimestamp: number | null = null
   let latestMediaTimestamp: number | null = null
 
+  function log(obj: any) {
+    try { console.log('[stream]', JSON.stringify(obj)) } catch {}
+    try { broadcastLog(obj) } catch {}
+  }
+
   async function ensureOpenAI(model: string, instructions?: string, prompt?: { id: string; version?: string }) {
     if (oaiWS) return
     // Mint ephemeral secret (no custom headers available in Edge WebSocket)
@@ -145,7 +150,7 @@ export async function GET(request: Request) {
     ]
     oaiWS = new WebSocket(url, protocols)
     oaiWS.addEventListener('open', () => {
-      try { console.log('[realtime] OpenAI WS connected') } catch {}
+      log({ at: 'oai.open', model, callSid, streamSid })
       oaiReady = true
       // Configure session for audio using env-driven best practices
       const update = buildServerUpdateFromEnv()
@@ -174,11 +179,12 @@ export async function GET(request: Request) {
       }
     })
     oaiWS.addEventListener('error', (e) => {
-      console.error('OAI WS error', e)
+      log({ at: 'oai.error', msg: String((e as any)?.message || e) })
       safeClose()
     })
     oaiWS.addEventListener('close', () => {
       oaiReady = false
+      log({ at: 'oai.close', callSid, streamSid })
       if (!closing) safeClose()
     })
   }
@@ -300,7 +306,7 @@ export async function GET(request: Request) {
       if (data.event === 'start') {
         streamSid = data.start.streamSid
         callSid = data.start.callSid || ''
-        try { console.log('[realtime] Twilio stream start', streamSid) } catch {}
+        log({ at: 'twilio.start', streamSid, callSid })
         const model = (process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
         const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
         const promptId = process.env.REALTIME_DEFAULT_PROMPT_ID || undefined
@@ -320,16 +326,21 @@ export async function GET(request: Request) {
         }
         clearPlaybackQueue()
         sendBase64ToOpenAI(b64)
+        if ((latestMediaTimestamp || 0) % 1000 < 20) {
+          log({ at: 'twilio.media.tick', ts: latestMediaTimestamp })
+        }
       } else if (data.event === 'mark' && data.mark?.name === 'commit') {
         if (oaiWS && oaiReady) {
           try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' })) } catch {}
           try { oaiWS.send(JSON.stringify({ type: 'response.create' })) } catch {}
         }
+        log({ at: 'twilio.mark.commit', streamSid })
       } else if (data.event === 'stop') {
+        log({ at: 'twilio.stop', streamSid })
         safeClose()
       }
     } catch (e) {
-      console.error('WS msg error', e)
+      log({ at: 'twilio.msg.error', err: String((e as any)?.message || e) })
     }
   })
   twilioWS.addEventListener('close', () => { safeClose() })
@@ -343,4 +354,14 @@ export async function GET(request: Request) {
   if (chosenProto) headers.set('Sec-WebSocket-Protocol', chosenProto)
   // @ts-ignore - Edge web standard response
   return new Response(null, { status: 101, webSocket: clientWS, headers })
+}
+
+// Simple in-memory log fanout for debug clients
+const logSockets: Set<WebSocket> = (globalThis as any).__logSockets || new Set()
+;(globalThis as any).__logSockets = logSockets
+function broadcastLog(obj: any) {
+  const s = JSON.stringify(obj)
+  for (const ws of Array.from(logSockets)) {
+    try { (ws as any).send?.(s) } catch { try { logSockets.delete(ws) } catch {} }
+  }
 }

@@ -1,45 +1,52 @@
-export const runtime = 'edge'
+import { NextRequest } from 'next/server'
+import { createClient } from 'redis'
 
-import { listTranscriptFrom } from '@/lib/live'
+export const runtime = 'nodejs'
 
-export async function GET(_: Request, { params }: { params: { sid: string } }) {
+function getRedis() {
+  const url = process.env.REDIS_URL || ''
+  if (!url) throw new Error('REDIS_URL not set')
+  const client = createClient({ url })
+  return client
+}
+
+export async function GET(req: NextRequest, { params }: { params: { sid: string } }) {
   const sid = params.sid
   if (!sid) return new Response('Missing sid', { status: 400 })
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder()
+      const key = `transcript:${sid}`
+      const r = getRedis()
+      await r.connect()
       let cursor = 0
-      let alive = true
-      // ping every 15s
-      const ping = () => controller.enqueue(enc.encode(`: ping\n\n`))
-      let pingTimer: any = setInterval(ping, 15000)
+      const ping = setInterval(() => controller.enqueue(enc.encode(`: ping\n\n`)), 15000)
 
-      const drain = async () => {
+      const loop = async () => {
         try {
-          while (alive) {
-            const { items, next } = await listTranscriptFrom(sid, cursor)
-            if (items.length > 0) {
+          while (true) {
+            const len = await r.lLen(key)
+            if (len > cursor) {
+              const items = await r.lRange(key, cursor, len - 1)
               for (const raw of items) {
                 controller.enqueue(enc.encode(`event: line\n`))
                 controller.enqueue(enc.encode(`data: ${raw}\n\n`))
               }
-              cursor = next
+              cursor = len
             }
-            // backoff
-            await new Promise((r) => setTimeout(r, 700))
+            await new Promise((res) => setTimeout(res, 700))
           }
         } catch (e) {
-          // end on error
-          alive = false
+          // fallthrough to finally
         } finally {
-          clearInterval(pingTimer)
+          clearInterval(ping)
+          try { await r.quit() } catch {}
           try { controller.close() } catch {}
         }
       }
-      drain()
+      loop()
     },
-    cancel() {}
   })
 
   return new Response(stream, {

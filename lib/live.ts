@@ -24,6 +24,17 @@ async function getKv() {
 
 export async function publishTranscript(key: string, ev: TranscriptEvent) {
   const k = `transcript:${key}`
+  // If a public base URL is available, also try to push via Node route (enables redis client usage)
+  const base = process.env.PUBLIC_BASE_URL
+  if (base) {
+    try {
+      await fetch(`${base.replace(/\/$/, '')}/api/live/${encodeURIComponent(key)}/push`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ev)
+      })
+    } catch {}
+  }
   if (kvAvailable()) {
     const kv = await getKv()
     await kv.rpush(k, JSON.stringify(ev))
