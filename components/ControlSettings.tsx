@@ -32,7 +32,7 @@ type Settings = {
     logprobs?: boolean
     include_segments?: boolean
   }
-  noise_reduction?: 'near_field' | 'none'
+  noise_reduction?: 'near_field' | 'far_field' | 'none' | string
 }
 
 export default function ControlSettings() {
@@ -127,8 +127,16 @@ export default function ControlSettings() {
           <input type="range" min={0} max={2} step={0.1} value={s.temperature ?? 0.7} onChange={(e) => setS({ ...s, temperature: parseFloat(e.target.value) })} />
         </div>
         <Input label="Max Output Tokens (blank=inf)" placeholder="" value={s.max_output_tokens ?? '' as any} onChange={(e) => setS({ ...s, max_output_tokens: e.target.value ? parseInt(e.target.value, 10) : null })} />
-        <Select label="Noise Reduction" options={[ {label: 'near_field', value:'near_field'}, {label: 'none', value: 'none'} ]} value={s.noise_reduction || 'near_field'} onChange={(v) => setS({ ...s, noise_reduction: v as any })} />
+        <Select label="Noise Reduction" options={[ {label: 'near_field', value:'near_field'}, {label:'far_field', value:'far_field'}, {label: 'none', value: 'none'}, {label:'custom…', value:'__custom__'} ]} value={(s.noise_reduction as any) || 'near_field'} onChange={(v) => {
+          if (v === '__custom__') return setS({ ...s, noise_reduction: '' })
+          setS({ ...s, noise_reduction: v as any })
+        }} />
       </div>
+      {typeof s.noise_reduction === 'string' && s.noise_reduction !== 'near_field' && s.noise_reduction !== 'far_field' && s.noise_reduction !== 'none' && (
+        <div className="mt-2">
+          <Input label="Custom noise reduction" value={s.noise_reduction} onChange={(e) => setS({ ...s, noise_reduction: e.target.value })} />
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Select label="Turn Detection" options={[ {label:'server_vad', value:'server_vad'}, {label:'none', value:'none'} ]} value={s.turn_detection?.type || 'server_vad'} onChange={(v) => setS({ ...s, turn_detection: v === 'none' ? { type: 'none' } : { type: 'server_vad', threshold: vad.threshold ?? 0.5, prefix_padding_ms: vad.prefix_padding_ms ?? 300, silence_duration_ms: vad.silence_duration_ms ?? 200, create_response: vad.create_response ?? true, interrupt_response: vad.interrupt_response ?? true, semantic: vad.semantic ?? false } })} />

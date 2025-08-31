@@ -34,7 +34,7 @@ export type RealtimeControlSettings = {
     logprobs?: boolean
     include_segments?: boolean
   }
-  noise_reduction?: 'near_field' | 'none'
+  noise_reduction?: 'near_field' | 'far_field' | 'none'
 }
 
 let dynamicSettings: RealtimeControlSettings | null = null
@@ -70,7 +70,7 @@ export function buildServerUpdateFromEnv() {
   if (typeof semantic === 'boolean') (vad as any).semantic = semantic
   const turn_detection: TurnDetectionNone | TurnDetectionVad = turnType === 'none' ? { type: 'none' } : vad
 
-  const noiseReduction = (process.env.REALTIME_NOISE_REDUCTION || 'near_field') as 'near_field' | 'none'
+  const noiseReduction = (process.env.REALTIME_NOISE_REDUCTION || 'near_field') as 'near_field' | 'far_field' | 'none'
   const inputRate = parseMaybeInt(process.env.REALTIME_INPUT_AUDIO_RATE, 24000)!
 
   const transcriptionEnabled = (process.env.REALTIME_TRANSCRIPTION_ENABLED || 'false').toLowerCase() === 'true'

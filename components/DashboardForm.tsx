@@ -54,7 +54,7 @@ export type DashboardValues = {
   transcription_language?: string
   transcription_logprobs?: boolean
   transcription_segments?: boolean
-  noise_reduction: 'none' | 'near_field'
+  noise_reduction: 'none' | 'near_field' | 'far_field' | string
   imageFiles: FileList | null
 }
 
@@ -90,7 +90,7 @@ export default function DashboardForm() {
         transcription_language: z.string().optional(),
         transcription_logprobs: z.boolean().optional(),
         transcription_segments: z.boolean().optional(),
-        noise_reduction: z.enum(['none','near_field']).default('near_field'),
+        noise_reduction: z.union([z.enum(['none','near_field','far_field']), z.string()]).default('near_field'),
         imageFiles: z.any().optional(),
       }).refine((v) => (v.instructions && v.instructions.trim().length > 0) || (v.promptId && v.promptId.trim().length > 0), {
         path: ['instructions'],
@@ -543,8 +543,14 @@ export default function DashboardForm() {
             </>
           )}
           <Controller control={form.control} name="noise_reduction" render={({ field }) => (
-            <Select label="Noise Reduction" options={[{label:'near_field', value:'near_field'},{label:'none', value:'none'}]} value={field.value} onChange={field.onChange} />
+            <Select label="Noise Reduction" options={[{label:'near_field', value:'near_field'},{label:'far_field', value:'far_field'},{label:'none', value:'none'},{label:'custom…', value:'__custom__'}]} value={(field.value as any)} onChange={(v) => {
+              if (v === '__custom__') return field.onChange('')
+              field.onChange(v)
+            }} />
           )} />
+          {typeof form.watch('noise_reduction') === 'string' && !['near_field','far_field','none'].includes(form.watch('noise_reduction') as any) && (
+            <Input label="Custom noise reduction" value={form.watch('noise_reduction') as any} onChange={(e) => form.setValue('noise_reduction', e.target.value)} />
+          )}
           <Input label="Input Audio Rate" type="number" {...form.register('input_audio_rate', { valueAsNumber: true })} />
           <Controller control={form.control} name="transcription_enabled" render={({ field }) => (
             <Toggle label="Transcription" checked={field.value} onChange={field.onChange} />
