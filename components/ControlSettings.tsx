@@ -131,7 +131,7 @@ export default function ControlSettings() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Select label="Turn Detection" options={[ {label:'server_vad', value:'server_vad'}, {label:'none', value:'none'} ]} value={s.turn_detection?.type || 'server_vad'} onChange={(v) => setS({ ...s, turn_detection: v === 'none' ? { type: 'none' } : { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 200, create_response: true, interrupt_response: true, semantic: false } })} />
+        <Select label="Turn Detection" options={[ {label:'server_vad', value:'server_vad'}, {label:'none', value:'none'} ]} value={s.turn_detection?.type || 'server_vad'} onChange={(v) => setS({ ...s, turn_detection: v === 'none' ? { type: 'none' } : { type: 'server_vad', threshold: vad.threshold ?? 0.5, prefix_padding_ms: vad.prefix_padding_ms ?? 300, silence_duration_ms: vad.silence_duration_ms ?? 200, create_response: vad.create_response ?? true, interrupt_response: vad.interrupt_response ?? true, semantic: vad.semantic ?? false } })} />
         {isVad && (
           <>
             <div>
@@ -144,8 +144,11 @@ export default function ControlSettings() {
         )}
       </div>
       {isVad && (
-        <div className="mt-2">
-          <Toggle label="Semantic VAD (experimental)" checked={!!vad.semantic} onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', semantic: v } })} hint="Enable semantic-based end-of-turn detection. May not be supported in all regions." />
+        <div className="mt-2 space-y-3">
+          <Toggle label="Semantic VAD (experimental)" checked={!!vad.semantic} onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', semantic: v } })} hint="Enable semantic-based end-of-turn detection." />
+          <Toggle label="Auto Create Response" checked={vad.create_response ?? true} onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', create_response: v } })} hint="If off, responses are triggered manually." />
+          <Toggle label="Interrupt Response" checked={vad.interrupt_response ?? true} onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', interrupt_response: v } })} hint="Allow barge-in to stop TTS." />
+          <Input label="Idle Timeout (ms, optional)" type="number" value={vad.idle_timeout_ms ?? ''} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', idle_timeout_ms: e.target.value ? parseInt(e.target.value, 10) : undefined } })} />
         </div>
       )}
 
@@ -162,4 +165,3 @@ export default function ControlSettings() {
     </section>
   )
 }
-

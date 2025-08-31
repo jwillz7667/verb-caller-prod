@@ -42,6 +42,10 @@ export type DashboardValues = {
   vad_threshold: number
   vad_prefix_padding_ms: number
   vad_silence_duration_ms: number
+  vad_semantic?: boolean
+  vad_create_response?: boolean
+  vad_interrupt_response?: boolean
+  vad_idle_timeout_ms?: number | ''
   input_audio_type: 'audio/pcm'
   input_audio_rate: number
   transcription_enabled: boolean
@@ -110,6 +114,10 @@ export default function DashboardForm() {
       vad_threshold: 0.5,
       vad_prefix_padding_ms: 300,
       vad_silence_duration_ms: 200,
+      vad_semantic: false,
+      vad_create_response: true,
+      vad_interrupt_response: true,
+      vad_idle_timeout_ms: '' as any,
       input_audio_type: 'audio/pcm',
       input_audio_rate: 24000,
       transcription_enabled: false,
@@ -245,8 +253,10 @@ export default function DashboardForm() {
               threshold: values.vad_threshold,
               prefix_padding_ms: values.vad_prefix_padding_ms,
               silence_duration_ms: values.vad_silence_duration_ms,
-              create_response: true,
-              interrupt_response: true,
+              create_response: values.vad_create_response ?? true,
+              interrupt_response: values.vad_interrupt_response ?? true,
+              ...(values.vad_semantic ? { semantic: true } : {}),
+              ...(values.vad_idle_timeout_ms ? { idle_timeout_ms: Number(values.vad_idle_timeout_ms) } : {}),
             },
         input_audio_format: { type: values.input_audio_type, rate: values.input_audio_rate },
         transcription: {
@@ -304,7 +314,7 @@ export default function DashboardForm() {
         voice: v.voice,
         turn_detection: v.turn_detection === 'none'
           ? { type: 'none', threshold: 0.5, prefix_padding_ms: 0, silence_duration_ms: 0, create_response: true, interrupt_response: true }
-          : { type: 'server_vad', threshold: v.vad_threshold, prefix_padding_ms: v.vad_prefix_padding_ms, silence_duration_ms: v.vad_silence_duration_ms, create_response: true, interrupt_response: true },
+          : { type: 'server_vad', threshold: v.vad_threshold, prefix_padding_ms: v.vad_prefix_padding_ms, silence_duration_ms: v.vad_silence_duration_ms, create_response: v.vad_create_response ?? true, interrupt_response: v.vad_interrupt_response ?? true, ...(v.vad_semantic ? { semantic: true } : {}), ...(v.vad_idle_timeout_ms ? { idle_timeout_ms: Number(v.vad_idle_timeout_ms) } : {}) },
         input_audio_format: { type: v.input_audio_type, rate: v.input_audio_rate },
         transcription: { enabled: v.transcription_enabled, model: v.transcription_model, prompt: v.transcription_prompt, language: v.transcription_language, logprobs: v.transcription_logprobs, include_segments: v.transcription_segments },
         noise_reduction: v.noise_reduction,
@@ -470,8 +480,11 @@ export default function DashboardForm() {
             <Select label="Model" options={[{label:'gpt-realtime', value:'gpt-realtime'},{label:'gpt-4o-realtime-preview', value:'gpt-4o-realtime-preview'}]} value={field.value} onChange={field.onChange} />
           )} />
           <Controller control={form.control} name="voice" render={({ field }) => (
-            <Select label="Voice" options={['alloy','echo','fable','onyx','nova','shimmer'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
+            <Select label="Voice" options={['alloy','echo','fable','onyx','nova','shimmer','verse','aria','custom'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
           )} />
+          {form.watch('voice') === 'custom' && (
+            <Input label="Custom voice" placeholder="e.g. alloy-intense" onChange={(e) => form.setValue('voice', e.target.value)} />
+          )}
           <Controller control={form.control} name="tool_choice" render={({ field }) => (
             <Select label="Tool Choice" options={['auto','required','none'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
           )} />
@@ -496,6 +509,10 @@ export default function DashboardForm() {
               </div>
               <Input label="Prefix Padding (ms)" type="number" {...form.register('vad_prefix_padding_ms', { valueAsNumber: true })} />
               <Input label="Silence Duration (ms)" type="number" {...form.register('vad_silence_duration_ms', { valueAsNumber: true })} />
+              <Toggle label="Semantic VAD" checked={!!form.watch('vad_semantic')} onChange={(v) => form.setValue('vad_semantic', v)} hint="Experimental semantic-based end-of-turn detection" />
+              <Toggle label="Auto Create Response" checked={!!form.watch('vad_create_response')} onChange={(v) => form.setValue('vad_create_response', v)} hint="If off, call will wait for manual response.create" />
+              <Toggle label="Interrupt Response" checked={!!form.watch('vad_interrupt_response')} onChange={(v) => form.setValue('vad_interrupt_response', v)} hint="Allow user speech to barge-in and cancel TTS" />
+              <Input label="Idle Timeout (ms, optional)" type="number" value={(form.watch('vad_idle_timeout_ms') as any) ?? ''} onChange={(e) => form.setValue('vad_idle_timeout_ms', e.target.value ? parseInt(e.target.value, 10) : ('' as any))} />
             </>
           )}
           <Controller control={form.control} name="noise_reduction" render={({ field }) => (
