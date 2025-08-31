@@ -1,4 +1,5 @@
 export const runtime = 'edge'
+import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
 
 // Basic u-law (G.711) <-> PCM16 conversions
 function muLawDecode(u8: Uint8Array): Int16Array {
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
   let oaiReady = false
   let closing = false
   let pendingPcm: Int16Array[] = []
+  let vadEnabled = true
 
   async function ensureOpenAI(model: string, instructions?: string, prompt?: { id: string; version?: string }) {
     if (oaiWS) return
@@ -119,24 +121,26 @@ export async function GET(request: Request) {
       return v as string
     })
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`
-    // Connect using ephemeral secret via subprotocol
-    oaiWS = new WebSocket(url, [
-      `openai-insecure-api-key.${token}`
-    ])
+    // Connect using recommended subprotocols: 'realtime' + ephemeral client secret
+    const org = process.env.OPENAI_ORG_ID
+    const project = process.env.OPENAI_PROJECT_ID
+    const protocols = [
+      'realtime',
+      `openai-insecure-api-key.${token}`,
+      ...(org ? [`openai-organization.${org}`] : []),
+      ...(project ? [`openai-project.${project}`] : []),
+    ]
+    oaiWS = new WebSocket(url, protocols)
     oaiWS.addEventListener('open', () => {
       try { console.log('[realtime] OpenAI WS connected') } catch {}
       oaiReady = true
-      // Configure session for audio
-      const update = {
-        type: 'session.update',
-        session: {
-          modalities: ['audio'],
-          input_audio_format: { type: 'audio/pcm', rate: 24000 },
-          voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
-          tool_choice: process.env.REALTIME_DEFAULT_TOOL_CHOICE || 'auto'
-        }
-      }
+      // Configure session for audio using env-driven best practices
+      const update = buildServerUpdateFromEnv()
       try { oaiWS!.send(JSON.stringify(update)) } catch {}
+      try {
+        const t = (update as any)?.session?.turn_detection?.type
+        vadEnabled = t !== 'none'
+      } catch {}
       // Flush any buffered audio
       if (pendingPcm.length > 0) {
         const merged = concatInt16(pendingPcm)
@@ -181,6 +185,14 @@ export async function GET(request: Request) {
 
   let playbackQueue: Uint8Array[] = []
   let playbackTimer: number | null = null
+  function clearPlaybackQueue() {
+    playbackQueue = []
+    if (playbackTimer != null) {
+      // @ts-ignore Edge runtime timers
+      clearTimeout(playbackTimer)
+      playbackTimer = null
+    }
+  }
   function enqueuePlayback(pcm24: Int16Array) {
     // Resample 24k -> 8k and mu-law encode
     const pcm8 = resamplePCM16(pcm24, 24000, 8000)
@@ -219,6 +231,12 @@ export async function GET(request: Request) {
       const u8 = base64ToUint8(msg.delta)
       const pcm = uint8ToInt16LE(u8)
       enqueuePlayback(pcm)
+    } else if (
+      msg.type === 'input_audio_buffer.speech_started' ||
+      msg.type === 'response.created'
+    ) {
+      // Barge-in: stop any queued playback when user begins speaking or new response lifecycle starts
+      clearPlaybackQueue()
     }
   }
 
@@ -241,12 +259,21 @@ export async function GET(request: Request) {
         const promptId = process.env.REALTIME_DEFAULT_PROMPT_ID || undefined
         const promptVersion = process.env.REALTIME_DEFAULT_PROMPT_VERSION || undefined
         await ensureOpenAI(model, instructions, promptId ? { id: promptId, version: promptVersion } : undefined)
+        // If VAD is disabled, proactively clear buffer for a fresh turn as per docs
+        if (oaiWS && oaiReady && !vadEnabled) {
+          try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.clear' })) } catch {}
+        }
       } else if (data.event === 'media') {
         // Incoming mu-law 8k audio from Twilio
         const b64 = data.media.payload as string
         const ulaw = base64ToUint8(b64)
         const pcm8 = muLawDecode(ulaw)
         const pcm24 = resamplePCM16(pcm8, 8000, 24000)
+        // Barge-in: If TTS is playing, cancel current response and clear buffer
+        if (oaiWS && oaiReady) {
+          try { oaiWS.send(JSON.stringify({ type: 'response.cancel' })) } catch {}
+        }
+        clearPlaybackQueue()
         sendPcmToOpenAI(pcm24)
       } else if (data.event === 'mark' && data.mark?.name === 'commit') {
         if (oaiWS && oaiReady) {

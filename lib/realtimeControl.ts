@@ -93,6 +93,8 @@ export function buildServerUpdateFromEnv() {
   if (typeof maxTokens === 'number') session.max_output_tokens = maxTokens
   session.turn_detection = turn_detection
   session.input_audio_format = { type: 'audio/pcm', rate: inputRate }
+  // Match output format to our Twilio bridge expectations (PCM16 24kHz)
+  session.output_audio_format = { type: 'audio/pcm', rate: inputRate }
   if (transcription) session.transcription = transcription
   session.noise_reduction = noiseReduction
 
