@@ -40,6 +40,15 @@ export async function POST(req: NextRequest) {
       url: twimlUrl,
       method: 'GET',
     }
+    // Optional best-practice: status callbacks for call lifecycle
+    const statusCb = process.env.TWILIO_STATUS_CALLBACK_URL
+    if (statusCb) {
+      callCreatePayload.statusCallback = statusCb
+      callCreatePayload.statusCallbackMethod = process.env.TWILIO_STATUS_CALLBACK_METHOD || 'POST'
+      callCreatePayload.statusCallbackEvent = (
+        process.env.TWILIO_STATUS_CALLBACK_EVENTS || 'initiated,ringing,answered,completed'
+      ).split(',').map((s) => s.trim()).filter(Boolean)
+    }
     if (data.record) {
       callCreatePayload.record = true
       callCreatePayload.recordingChannels = 'dual'

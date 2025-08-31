@@ -94,7 +94,7 @@ Note: The Dashboard “Server Control Settings” UI can override these defaults
 ## Environment
 - `OPENAI_API_KEY`: Server-side key used to mint ephemeral client secrets.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: Twilio credentials.
-- `PUBLIC_BASE_URL`: e.g., `https://verbio.app` for Twilio callbacks.
+- `PUBLIC_BASE_URL`: Canonical HTTPS origin used to build Twilio callbacks and Stream URLs. Use the exact host Twilio will call (e.g., `https://www.verbio.app`). If your apex domain redirects to `www`, set this to the `www` host to avoid WebSocket handshake failures from 30x redirects.
 - `TWIML_DEFAULT_MODE`: Optional. Set to `stream` to default all incoming calls to Twilio Media Streams without needing a query param.
 - `ALLOW_CLIENT_CREDS` / `NEXT_PUBLIC_ALLOW_CLIENT_CREDS`: Enable UI credential inputs and server acceptance (dev only). Defaults to false; do not enable in production.
 

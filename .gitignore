@@ -62,7 +62,7 @@ Thumbs.db
 realtime-docs/
 
 # Lockfiles (recommended to keep tracked). Uncomment to ignore if desired.
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-# bun.lockb
+ package-lock.json
+ yarn.lock
+ pnpm-lock.yaml
+ bun.lockb

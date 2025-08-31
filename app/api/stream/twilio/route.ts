@@ -124,6 +124,7 @@ export async function GET(request: Request) {
       `openai-insecure-api-key.${token}`
     ])
     oaiWS.addEventListener('open', () => {
+      try { console.log('[realtime] OpenAI WS connected') } catch {}
       oaiReady = true
       // Configure session for audio
       const update = {
@@ -234,6 +235,7 @@ export async function GET(request: Request) {
       const data = JSON.parse(event.data as string)
       if (data.event === 'start') {
         streamSid = data.start.streamSid
+        try { console.log('[realtime] Twilio stream start', streamSid) } catch {}
         const model = (process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
         const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
         const promptId = process.env.REALTIME_DEFAULT_PROMPT_ID || undefined
