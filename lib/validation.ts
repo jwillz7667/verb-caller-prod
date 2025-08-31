@@ -43,7 +43,11 @@ const RealtimeSessionCore = z.object({
     rate: z.number().int().default(24000)
   }).default({ type: 'audio/pcm', rate: 24000 }),
   transcription: TranscriptionSchema.default({ enabled: false, model: 'gpt-4o-transcribe' }),
-  noise_reduction: z.enum(['none', 'near_field']).default('near_field'),
+  // Support additional and custom noise reduction profiles
+  noise_reduction: z.union([
+    z.enum(['none', 'near_field', 'far_field']),
+    z.string()
+  ]).default('near_field'),
   embedded_media: z.array(
     z.object({
       type: z.literal('image'),
