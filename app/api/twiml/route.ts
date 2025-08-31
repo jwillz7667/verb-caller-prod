@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const transport = (searchParams.get('transport') || 'tls').toLowerCase() // 'tls' | 'tcp' | 'udp'
   const portParam = searchParams.get('port')
   const port = portParam && /^[0-9]{2,5}$/.test(portParam) ? portParam : ''
+  const mode = (searchParams.get('mode') || 'sip').toLowerCase() // 'sip' | 'stream'
   // If no secret is provided, mint one on the fly (automatic flow)
   if (!secret) {
     try {
@@ -71,6 +72,11 @@ export async function GET(req: NextRequest) {
       return new Response('<Response><Say>Forbidden</Say></Response>', { status: 403, headers: { 'Content-Type': 'text/xml' } })
     }
   }
+  if (mode === 'stream') {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Start>\n    <Stream url="wss://${new URL(req.url).host}/api/stream/twilio" />\n  </Start>\n  <Pause length="3600"/>\n</Response>`
+    return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
+  }
+
   // Compose target URI
   let sipUri: string
   if (scheme === 'sips') {

@@ -24,6 +24,16 @@ Professional speech-to-speech AI calling app using OpenAI Realtime API and Twili
 - Advanced: You can still pre-generate a client secret and use: `https://YOUR_DOMAIN/api/twiml?secret=CLIENT_SECRET_VALUE`.
   Optional tuning via query: `scheme=sip|sips`, `transport=tls|tcp|udp`, `port=5061`, `model=...`, `instructions=...`, `prompt_id=...`, `prompt_version=...`.
 
+### Media Streams Fallback (WebSocket)
+If your carrier path cannot reach SIP to `sip.openai.com`, switch the TwiML to WebSocket Media Streams:
+
+- Webhook URL: `https://YOUR_DOMAIN/api/twiml?mode=stream`
+- Behavior: Twilio opens a WSS to `wss://YOUR_DOMAIN/api/stream/twilio`. The server mints an ephemeral Realtime token, opens a WSS to OpenAI Realtime, and bridges audio both ways:
+  - Twilio G.711 μ-law 8kHz → decode → resample → PCM16 24kHz → OpenAI
+  - OpenAI PCM16 24kHz → resample → μ-law 8kHz → Twilio (20ms frames)
+
+This adheres to Twilio Media Streams and OpenAI Realtime best practices: TLS, per-call ephemeral auth, pacing frames at 20ms, and no client-side secrets.
+
 ### Using Prompt References (optional)
 You can attach a prebuilt Prompt to the Realtime session when minting an ephemeral client secret by including a `session.prompt` object:
 
