@@ -6,13 +6,14 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({})) as { secret?: string; phoneNumber?: string; scheme?: string; transport?: string; port?: string }
+    const body = await req.json().catch(() => ({})) as { secret?: string; phoneNumber?: string; scheme?: string; transport?: string; port?: string; mode?: string }
     const secret = body.secret
     const client = getTwilioClient()
     const base = resolveBaseUrl(req.url)
     const phone = body.phoneNumber || getTwilioFromNumber()
     if (!phone) return Response.json({ error: 'Server TWILIO_FROM_NUMBER not configured and no phoneNumber provided' }, { status: 400 })
     const extra: string[] = []
+    if (body.mode) extra.push(`mode=${encodeURIComponent(body.mode)}`)
     if (body.scheme) extra.push(`scheme=${encodeURIComponent(body.scheme)}`)
     if (body.transport) extra.push(`transport=${encodeURIComponent(body.transport)}`)
     if (body.port) extra.push(`port=${encodeURIComponent(body.port)}`)
