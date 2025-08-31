@@ -208,6 +208,7 @@ export default function DashboardForm() {
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<Array<{ t: number; type: string; text: string }>>([])
   const sseRef = useRef<EventSource | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -509,8 +510,49 @@ export default function DashboardForm() {
 
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-[320px,1fr]">
+      {/* Mobile settings toggle */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((v) => !v)}
+          className="mb-2 inline-flex w-full items-center justify-between rounded-md border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-sm text-white"
+          aria-expanded={settingsOpen}
+        >
+          <span>Settings</span>
+          <span className="text-xs text-neutral-400">{settingsOpen ? 'Hide' : 'Show'}</span>
+        </button>
+        {settingsOpen && (
+          <div className="mb-2 rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-300">Settings</h2>
+              <div className="flex items-center gap-2">
+                <Button type="button" className="px-3 py-1 text-xs" onClick={onSavePreset}>Save</Button>
+                <Button type="button" className="px-3 py-1 text-xs" onClick={testWebSocket}>Test</Button>
+              </div>
+            </div>
+            {/* reuse of sidebar content is complex; show key controls for mobile */}
+            <div className="space-y-4">
+              <Controller control={form.control} name="model" render={({ field }) => (
+                <Select label="Model" options={[{label:'gpt-realtime', value:'gpt-realtime'},{label:'gpt-4o-realtime-preview', value:'gpt-4o-realtime-preview'}]} value={field.value} onChange={field.onChange} />
+              )} />
+              <Controller control={form.control} name="voice" render={({ field }) => (
+                <Select label="Voice" options={['alloy','echo','fable','onyx','nova','shimmer','verse','aria','custom'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
+              )} />
+              {form.watch('voice') === 'custom' && (
+                <Input label="Custom voice" placeholder="e.g. alloy-intense" onChange={(e) => form.setValue('voice', e.target.value)} />
+              )}
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">Temperature: {form.watch('temperature')}</label>
+                <input type="range" min={0} max={2} step={0.1} {...form.register('temperature', { valueAsNumber: true })} />
+              </div>
+              <Textarea label="Instructions" rows={4} {...form.register('instructions')} />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Sidebar: Settings (Playground-like) */}
-      <aside className="sticky top-[76px] h-[calc(100vh-120px)] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <aside className="sticky top-[76px] hidden h-[calc(100vh-120px)] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 md:block">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-300">Settings</h2>
           <div className="flex items-center gap-2">
@@ -695,7 +737,7 @@ export default function DashboardForm() {
           </div>
         </div>
 
-        <div className="h-[56vh] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
+        <div className="h-[40vh] overflow-auto rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 sm:h-[50vh] md:h-[56vh]">
           <h3 className="mb-2 text-sm font-medium text-neutral-300">Transcription</h3>
           {transcript.length === 0 ? (
             <p className="text-sm text-neutral-500">Live transcription will appear here during an active call.</p>
