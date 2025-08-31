@@ -30,7 +30,9 @@ export type DashboardValues = {
   record: boolean
   expiresSeconds: number
   model: string
-  instructions: string
+  instructions?: string
+  promptId?: string
+  promptVersion?: string
   tool_choice: 'auto' | 'required' | 'none'
   temperature: number
   max_output_tokens: string
@@ -64,7 +66,9 @@ export default function DashboardForm() {
         record: z.boolean().default(true),
         expiresSeconds: z.number().min(60).max(3600).default(600),
         model: z.enum(['gpt-realtime', 'gpt-4o-realtime-preview']).default('gpt-realtime'),
-        instructions: z.string().min(1),
+        instructions: z.string().optional(),
+        promptId: z.string().optional(),
+        promptVersion: z.string().optional(),
         tool_choice: z.enum(['auto', 'required', 'none']).default('auto'),
         temperature: z.number().min(0).max(2).default(0.7),
         max_output_tokens: z.string().default('inf'),
@@ -84,6 +88,9 @@ export default function DashboardForm() {
         transcription_segments: z.boolean().optional(),
         noise_reduction: z.enum(['none','near_field']).default('near_field'),
         imageFiles: z.any().optional(),
+      }).refine((v) => (v.instructions && v.instructions.trim().length > 0) || (v.promptId && v.promptId.trim().length > 0), {
+        path: ['instructions'],
+        message: 'Provide Instructions or a Prompt ID.'
       })
     ),
     defaultValues: {
@@ -92,6 +99,8 @@ export default function DashboardForm() {
       expiresSeconds: 600,
       model: 'gpt-realtime',
       instructions: defaultInstructions,
+      promptId: '',
+      promptVersion: '',
       tool_choice: 'auto',
       temperature: 0.7,
       max_output_tokens: 'inf',
@@ -124,6 +133,8 @@ export default function DashboardForm() {
   const onSavePreset = useCallback(() => {
     const {
       instructions,
+      promptId,
+      promptVersion,
       model,
       tool_choice,
       temperature,
@@ -148,6 +159,8 @@ export default function DashboardForm() {
       STORAGE_KEY,
       JSON.stringify({
         instructions,
+        promptId,
+        promptVersion,
         model,
         tool_choice,
         temperature,
@@ -217,7 +230,8 @@ export default function DashboardForm() {
       const session: RealtimeSession = {
         type: 'realtime',
         model: values.model,
-        instructions: values.instructions,
+        ...(values.instructions && values.instructions.trim().length > 0 ? { instructions: values.instructions } : {}),
+        ...(values.promptId && values.promptId.trim().length > 0 ? { prompt: { id: values.promptId, ...(values.promptVersion && values.promptVersion.trim().length > 0 ? { version: values.promptVersion } : {}) } } : {}),
         tools,
         tool_choice: values.tool_choice,
         temperature: values.temperature,
@@ -280,7 +294,8 @@ export default function DashboardForm() {
       const session: RealtimeSession = {
         type: 'realtime',
         model: v.model,
-        instructions: v.instructions,
+        ...(v.instructions && v.instructions.trim().length > 0 ? { instructions: v.instructions } : {}),
+        ...(v.promptId && v.promptId.trim().length > 0 ? { prompt: { id: v.promptId, ...(v.promptVersion && v.promptVersion.trim().length > 0 ? { version: v.promptVersion } : {}) } } : {}),
         tools,
         tool_choice: v.tool_choice,
         temperature: v.temperature,
@@ -324,7 +339,8 @@ export default function DashboardForm() {
           session: {}
         }
         // Allow-list typical realtime session fields for session.update
-        update.session.instructions = session.instructions
+        if ((session as any).instructions) update.session.instructions = (session as any).instructions
+        if ((session as any).prompt) update.session.prompt = (session as any).prompt
         update.session.voice = session.voice
         update.session.modalities = session.modalities
         update.session.tool_choice = session.tool_choice
@@ -373,7 +389,8 @@ export default function DashboardForm() {
       const session: RealtimeSession = {
         type: 'realtime',
         model: v.model,
-        instructions: v.instructions,
+        ...(v.instructions && v.instructions.trim().length > 0 ? { instructions: v.instructions } : {}),
+        ...(v.promptId && v.promptId.trim().length > 0 ? { prompt: { id: v.promptId, ...(v.promptVersion && v.promptVersion.trim().length > 0 ? { version: v.promptVersion } : {}) } } : {}),
         tools,
         tool_choice: v.tool_choice,
         temperature: v.temperature,
@@ -483,8 +500,15 @@ export default function DashboardForm() {
           <Input label="Expires After Seconds" type="number" {...form.register('expiresSeconds', { valueAsNumber: true })} />
         </div>
         <div className="mt-4">
-          <Textarea label="Instructions" {...form.register('instructions')} defaultValue={defaultInstructions} />
-          <div className="mt-2 flex gap-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="md:col-span-3">
+              <Textarea label="Instructions (optional if using Prompt)" {...form.register('instructions')} defaultValue={defaultInstructions} />
+            </div>
+            <Input label="Prompt ID (optional)" placeholder="pmpt_..." {...form.register('promptId')} />
+            <Input label="Prompt Version (optional)" placeholder="e.g. 2" {...form.register('promptVersion')} />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-xs text-neutral-500">Provide either Instructions or a Prompt ID.</p>
             <Button type="button" onClick={onSavePreset}>Save Preset</Button>
           </div>
         </div>
