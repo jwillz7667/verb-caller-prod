@@ -1,7 +1,5 @@
 export const runtime = 'edge'
 
-import { createEphemeralClientSecret } from '@/lib/openai'
-
 // Basic u-law (G.711) <-> PCM16 conversions
 function muLawDecode(u8: Uint8Array): Int16Array {
   const out = new Int16Array(u8.length)
@@ -229,7 +227,8 @@ export async function GET(request: Request) {
     try { oaiWS?.close() } catch {}
   }
 
-  twilioWS.accept()
+  // @ts-ignore accept() is available in Next.js Edge WS
+  ;(twilioWS as any).accept?.()
   twilioWS.addEventListener('message', async (event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data as string)
@@ -266,4 +265,3 @@ export async function GET(request: Request) {
   // @ts-ignore - Edge web standard response
   return new Response(null, { status: 101, webSocket: clientWS })
 }
-
