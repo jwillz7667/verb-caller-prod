@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const transport = (searchParams.get('transport') || 'tls').toLowerCase() // 'tls' | 'tcp' | 'udp'
   const portParam = searchParams.get('port')
   const port = portParam && /^[0-9]{2,5}$/.test(portParam) ? portParam : ''
-  const mode = (searchParams.get('mode') || 'sip').toLowerCase() // 'sip' | 'stream'
+  const mode = (searchParams.get('mode') || process.env.TWIML_DEFAULT_MODE || 'sip').toLowerCase() // 'sip' | 'stream'
   // If no secret is provided, mint one on the fly (automatic flow)
   if (!secret) {
     try {
