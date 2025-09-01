@@ -5,22 +5,13 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   // Deep clone to avoid mutating caller input
   const body: any = JSON.parse(JSON.stringify(payload))
   
-  // Allow all valid session parameters for ephemeral token creation
-  // Based on OpenAI Realtime API documentation
-  // Note: temperature and max_response_output_tokens are not supported in ephemeral token creation
+  // Allow ONLY the parameters that OpenAI's ephemeral token endpoint actually accepts
+  // Most session configuration must be done via session.update AFTER connection
   const allowedSession = new Set([
     'type',
     'model', 
-    'instructions',
-    'prompt',
-    'voice',
-    'modalities',
-    'input_audio_format',
-    'output_audio_format',
-    'input_audio_transcription',
-    'turn_detection',
-    'tools',
-    'tool_choice'
+    'instructions'
+    // That's it! Everything else must be set via session.update after WebSocket connection
   ])
   
   const s = body.session || {}

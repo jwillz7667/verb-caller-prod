@@ -412,39 +412,48 @@ export default function DashboardForm() {
       ])
       ws.onopen = () => {
         toast.success('WebSocket connected')
-        // Build a compliant session.update payload (omit fields not supported by client_secrets)
+        // Build a session.update payload with ALL parameters from the form
         const update: any = {
           type: 'session.update',
-          session: {}
+          session: {
+            voice: v.voice,
+            modalities: v.modalities,
+            tool_choice: v.tool_choice,
+            temperature: v.temperature,
+            max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens),
+            turn_detection: v.turn_detection === 'none'
+              ? { type: 'none' }
+              : v.turn_detection === 'semantic_vad'
+              ? { 
+                  type: 'semantic_vad',
+                  eagerness: v.vad_eagerness || 'auto',
+                  create_response: v.vad_create_response ?? true,
+                  interrupt_response: v.vad_interrupt_response ?? true,
+                }
+              : {
+                  type: 'server_vad',
+                  threshold: v.vad_threshold,
+                  prefix_padding_ms: v.vad_prefix_padding_ms,
+                  silence_duration_ms: v.vad_silence_duration_ms,
+                  create_response: v.vad_create_response ?? true,
+                  interrupt_response: v.vad_interrupt_response ?? true,
+                },
+            input_audio_format: v.input_audio_format,
+            output_audio_format: v.output_audio_format,
+            transcription: {
+              enabled: v.transcription_enabled,
+              model: v.transcription_model,
+              prompt: v.transcription_prompt,
+              language: v.transcription_language,
+              logprobs: v.transcription_logprobs,
+              include_segments: v.transcription_segments,
+            },
+            noise_reduction: v.noise_reduction,
+          }
         }
-        // Allow-list typical realtime session fields for session.update
-        if ((session as any).instructions) update.session.instructions = (session as any).instructions
-        if ((session as any).prompt) update.session.prompt = (session as any).prompt
-        update.session.voice = session.voice
-        update.session.modalities = session.modalities
-        update.session.tool_choice = session.tool_choice
-        if (Array.isArray(session.tools) && session.tools.length > 0) {
-          update.session.tools = session.tools
-        }
-        if (typeof session.temperature === 'number') {
-          update.session.temperature = session.temperature
-        }
-        if (session.max_output_tokens !== 'inf' && typeof session.max_output_tokens === 'number') {
-          update.session.max_output_tokens = session.max_output_tokens
-        }
-        if (session.turn_detection && session.turn_detection.type === 'server_vad') {
-          update.session.turn_detection = session.turn_detection
-        } else {
-          update.session.turn_detection = { type: 'none' }
-        }
-        if (session.input_audio_format) {
-          update.session.input_audio_format = session.input_audio_format
-        }
-        if (session.transcription && session.transcription.enabled) {
-          update.session.transcription = session.transcription
-        }
-        if (session.noise_reduction) {
-          update.session.noise_reduction = session.noise_reduction
+        // Add tools if present
+        if (allTools.length > 0) {
+          update.session.tools = allTools
         }
         try { ws.send(JSON.stringify(update)) } catch {}
       }
