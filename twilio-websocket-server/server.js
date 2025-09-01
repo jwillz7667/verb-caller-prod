@@ -74,12 +74,9 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', async (twilioWS, request) => {
   console.log('New Twilio WebSocket connection from:', request.headers['x-forwarded-for'] || request.socket.remoteAddress);
-  console.log('Full URL:', request.url);
-  console.log('Headers:', JSON.stringify(request.headers, null, 2));
   
   // Parse secret from URL path or query parameters
   const fullUrl = request.url || '';
-  console.log('Parsing URL:', fullUrl);
   
   // Try multiple ways to get the secret
   let providedSecret = null;
@@ -90,7 +87,6 @@ wss.on('connection', async (twilioWS, request) => {
     const pathSegment = fullUrl.split('?')[0].substring(1); // Remove leading /
     if (pathSegment) {
       providedSecret = decodeURIComponent(pathSegment);
-      console.log('Method 1 - Path secret:', providedSecret ? providedSecret.substring(0, 10) + '...' : 'Not found');
     }
   }
   
@@ -99,14 +95,12 @@ wss.on('connection', async (twilioWS, request) => {
     const queryString = fullUrl.split('?')[1];
     const params = new URLSearchParams(queryString);
     providedSecret = params.get('secret');
-    console.log('Method 2 - Query param secret:', providedSecret ? 'Found' : 'Not found');
   }
   
   // Method 3: Parse with url module (backup)
   if (!providedSecret) {
     const queryParams = url.parse(fullUrl, true).query;
     providedSecret = queryParams.secret;
-    console.log('Method 3 - URL parse secret:', providedSecret ? 'Found' : 'Not found');
   }
   
   if (!providedSecret) {
@@ -278,10 +272,8 @@ wss.on('connection', async (twilioWS, request) => {
           if (msg.media?.payload && oaiWS && oaiWS.readyState === WebSocket.OPEN) {
             state.latestMediaTimestamp = msg.media.timestamp || state.latestMediaTimestamp;
             
-            // Cancel any in-progress response
-            oaiWS.send(JSON.stringify({ type: 'response.cancel' }));
-            
-            // Send audio
+            // Don't cancel on every packet - let VAD handle interruptions
+            // Only send audio
             oaiWS.send(JSON.stringify({
               type: 'input_audio_buffer.append',
               audio: msg.media.payload
