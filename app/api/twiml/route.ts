@@ -113,12 +113,13 @@ export async function GET(req: NextRequest) {
   }
 
   // Compose target URI with proper escaping
+  // OpenAI requires sip: with transport=tls, not sips:
   let sipUri: string
-  if (scheme === 'sips') {
-    // TLS implied; Twilio defaults to 5061 if port omitted
-    sipUri = `sips:${secret}@${sipDomain}${port ? `:${port}` : ''}`
+  if (transport === 'tls') {
+    // Use sip: with transport=tls for OpenAI (port 5061 is default for TLS)
+    sipUri = `sip:${secret}@${sipDomain}${port ? `:${port}` : ':5061'};transport=tls`
   } else {
-    // Default to SIP over TLS via transport param
+    // Non-TLS transport
     sipUri = `sip:${secret}@${sipDomain}${port ? `:${port}` : ''};transport=${transport}`
   }
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${escapeXml(sipUri)}</Sip>\n  </Dial>\n</Response>`
