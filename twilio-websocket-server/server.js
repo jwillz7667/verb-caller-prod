@@ -73,10 +73,11 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', async (twilioWS, request) => {
-  console.log('New Twilio WebSocket connection');
+  console.log('New Twilio WebSocket connection from:', request.headers['x-forwarded-for'] || request.socket.remoteAddress);
+  console.log('URL:', request.url);
   
   // Parse query parameters to get the secret
-  const queryParams = url.parse(request.url, true).query;
+  const queryParams = url.parse(request.url || '', true).query;
   const providedSecret = queryParams.secret;
   
   if (!providedSecret) {
@@ -84,6 +85,8 @@ wss.on('connection', async (twilioWS, request) => {
     twilioWS.close(1008, 'Secret required');
     return;
   }
+  
+  console.log('Secret received:', providedSecret.substring(0, 10) + '...');
 
   let oaiWS = null;
   const state = {
@@ -100,6 +103,8 @@ wss.on('connection', async (twilioWS, request) => {
       const model = process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime';
       const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
       
+      console.log('Connecting to OpenAI with model:', model);
+      
       const protocols = [
         'realtime',
         `openai-insecure-api-key.${providedSecret}`
@@ -107,6 +112,10 @@ wss.on('connection', async (twilioWS, request) => {
       
       if (process.env.OPENAI_ORG_ID) {
         protocols.push(`openai-organization.${process.env.OPENAI_ORG_ID}`);
+      }
+      
+      if (process.env.OPENAI_PROJECT_ID) {
+        protocols.push(`openai-project.${process.env.OPENAI_PROJECT_ID}`);
       }
       
       oaiWS = new WebSocket(wsUrl, protocols);
@@ -147,15 +156,18 @@ wss.on('connection', async (twilioWS, request) => {
       });
       
       oaiWS.on('error', (error) => {
-        console.error('OpenAI WebSocket error:', error);
+        console.error('OpenAI WebSocket error:', error.message || error);
+        // Close Twilio connection if OpenAI fails
+        twilioWS.close(1011, 'OpenAI connection failed');
       });
       
-      oaiWS.on('close', () => {
-        console.log('OpenAI WebSocket closed');
+      oaiWS.on('close', (code, reason) => {
+        console.log('OpenAI WebSocket closed. Code:', code, 'Reason:', reason);
       });
       
     } catch (error) {
-      console.error('Failed to connect to OpenAI:', error);
+      console.error('Failed to connect to OpenAI:', error.message || error);
+      twilioWS.close(1011, 'Failed to connect to OpenAI');
     }
   }
 
