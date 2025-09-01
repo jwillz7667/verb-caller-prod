@@ -8,13 +8,16 @@ type TurnDetectionVad = {
   interrupt_response?: boolean
 }
 
+// Aligned with OpenAI Realtime API session.update parameters
 export type RealtimeControlSettings = {
-  voice?: string
-  tool_choice?: 'auto' | 'required' | 'none'
-  tools?: any[]
-  modalities?: Array<'audio' | 'text'>
-  temperature?: number
-  max_output_tokens?: number | null
+  // Core session parameters
+  voice?: string  // alloy, echo, shimmer
+  instructions?: string  // System instructions
+  input_audio_format?: string  // g711_ulaw, pcm16
+  output_audio_format?: string  // g711_ulaw, pcm16
+  input_audio_transcription?: {
+    model: string  // whisper-1
+  } | null
   turn_detection?:
     | { type: 'none' }
     | {
@@ -23,19 +26,11 @@ export type RealtimeControlSettings = {
         prefix_padding_ms?: number
         silence_duration_ms?: number
         create_response?: boolean
-        interrupt_response?: boolean
-        semantic?: boolean // experimental
       }
-  input_audio_format?: { type: 'audio/pcm'; rate: number }
-  transcription?: {
-    enabled: boolean
-    model: string
-    prompt?: string
-    language?: string
-    logprobs?: boolean
-    include_segments?: boolean
-  }
-  noise_reduction?: 'near_field' | 'far_field' | 'none'
+  tools?: any[]  // Function tools array
+  tool_choice?: 'auto' | 'none' | 'required' | string  // Strategy or specific function
+  temperature?: number  // 0.0 to 2.0
+  max_response_output_tokens?: number | null  // Max tokens for response
 }
 
 let dynamicSettings: RealtimeControlSettings | null = null
@@ -89,24 +84,30 @@ export function buildServerUpdateFromEnv() {
       }
     : undefined
 
+  const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.'
+  
   const session: any = {}
   if (voice) session.voice = voice
+  if (instructions) session.instructions = instructions
   if (toolChoice) session.tool_choice = toolChoice
-  if (modalities.length > 0) session.modalities = modalities
   if (typeof temperature === 'number') session.temperature = temperature
-  if (typeof maxTokens === 'number') session.max_output_tokens = maxTokens
+  if (typeof maxTokens === 'number') session.max_response_output_tokens = maxTokens
   session.turn_detection = turn_detection
+  
   if (useG711) {
-    // For SIP, prefer G.711 μ-law passthrough
+    // For SIP/telephony, use G.711 μ-law
     session.input_audio_format = 'g711_ulaw'
     session.output_audio_format = 'g711_ulaw'
   } else {
-    session.input_audio_format = { type: 'audio/pcm', rate: inputRate }
-    // Match output format to our Twilio bridge expectations (PCM16 24kHz)
-    session.output_audio_format = { type: 'audio/pcm', rate: inputRate }
+    // For WebRTC/browser, use PCM16
+    session.input_audio_format = 'pcm16'
+    session.output_audio_format = 'pcm16'
   }
-  if (transcription) session.transcription = transcription
-  session.noise_reduction = noiseReduction
+  
+  // Add input audio transcription if enabled
+  if (transcriptionEnabled) {
+    session.input_audio_transcription = { model: 'whisper-1' }
+  }
 
   return { type: 'session.update', session }
 }
@@ -115,16 +116,19 @@ export function buildServerUpdate() {
   const s = getRealtimeControlSettings()
   if (!s) return buildServerUpdateFromEnv()
   const session: any = {}
+  
+  // Apply valid session.update parameters
   if (s.voice) session.voice = s.voice
+  if (s.instructions) session.instructions = s.instructions
   if (s.tool_choice) session.tool_choice = s.tool_choice
   if (Array.isArray(s.tools) && s.tools.length > 0) session.tools = s.tools
-  if (Array.isArray(s.modalities) && s.modalities.length > 0) session.modalities = s.modalities
   if (typeof s.temperature === 'number') session.temperature = s.temperature
-  if (typeof s.max_output_tokens === 'number') session.max_output_tokens = s.max_output_tokens
+  if (typeof s.max_response_output_tokens === 'number') session.max_response_output_tokens = s.max_response_output_tokens
   if (s.turn_detection) session.turn_detection = s.turn_detection
   if (s.input_audio_format) session.input_audio_format = s.input_audio_format
-  if (s.transcription && s.transcription.enabled) session.transcription = s.transcription
-  if (s.noise_reduction) session.noise_reduction = s.noise_reduction
+  if (s.output_audio_format) session.output_audio_format = s.output_audio_format
+  if (s.input_audio_transcription) session.input_audio_transcription = s.input_audio_transcription
+  
   return { type: 'session.update', session }
 }
 

@@ -6,38 +6,29 @@ import { Select } from './ui/Select'
 import { Toggle } from './ui/Toggle'
 import toast from 'react-hot-toast'
 
+// Settings type aligned with OpenAI Realtime API documentation
 type Settings = {
-  model?: string  // gpt-realtime or gpt-4o-realtime-preview
-  voice?: string  // alloy, echo, shimmer, nova, sage (new 2025 voices)
-  tool_choice?: 'auto' | 'required' | 'none' | string  // Can be specific function name
-  tools?: any[]
-  modalities?: Array<'audio' | 'text' | 'image'>  // Image support added in 2025
-  temperature?: number
-  max_response_output_tokens?: number | null  // Renamed from max_output_tokens
+  // Core session parameters (valid for session.update)
+  voice?: string  // alloy, echo, shimmer
+  instructions?: string  // System instructions
+  input_audio_format?: string  // g711_ulaw, pcm16
+  output_audio_format?: string  // g711_ulaw, pcm16
+  input_audio_transcription?: {
+    model: string  // whisper-1
+  } | null
   turn_detection?:
     | { type: 'none' }
     | {
-        type: 'server_vad' | 'semantic_vad'  // semantic_vad added
+        type: 'server_vad'  // Only server_vad is documented
         threshold?: number
         prefix_padding_ms?: number
         silence_duration_ms?: number
         create_response?: boolean
       }
-  input_audio_format?: string  // g711_ulaw, pcm16, etc.
-  output_audio_format?: string  // g711_ulaw, pcm16, etc.
-  input_audio_transcription?: {
-    model: string  // whisper-1
-  } | null
-  transcription?: {
-    enabled: boolean
-    model: string
-    prompt?: string
-    language?: string
-    logprobs?: boolean
-    include_segments?: boolean
-  }
-  instructions?: string  // System instructions
-  prompt?: { id: string; version?: string }  // Reusable prompts (2025)
+  tools?: any[]  // Function tools array
+  tool_choice?: 'auto' | 'none' | 'required' | string  // Strategy or specific function
+  temperature?: number  // 0.0 to 2.0
+  max_response_output_tokens?: number | null  // Max tokens for response
 }
 
 export default function ControlSettings() {
@@ -45,11 +36,10 @@ export default function ControlSettings() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [s, setS] = useState<Settings>({
-    model: 'gpt-realtime',  // Latest 2025 model
     voice: 'alloy',
+    instructions: 'You are a helpful assistant. Be concise and natural in your responses.',
     tool_choice: 'auto',
     tools: [],
-    modalities: ['audio', 'text'],  // Default to audio and text
     temperature: 0.8,
     max_response_output_tokens: 4096,
     turn_detection: { 
@@ -59,11 +49,9 @@ export default function ControlSettings() {
       silence_duration_ms: 500, 
       create_response: true
     },
-    input_audio_format: 'pcm16',  // or g711_ulaw for telephony
-    output_audio_format: 'pcm16',  // or g711_ulaw for telephony
+    input_audio_format: 'pcm16',  // pcm16 or g711_ulaw
+    output_audio_format: 'pcm16',  // pcm16 or g711_ulaw
     input_audio_transcription: null,
-    transcription: { enabled: false, model: 'whisper-1' },
-    instructions: 'You are a helpful assistant. Be concise and natural in your responses.',
   })
 
   async function load() {
@@ -111,7 +99,7 @@ export default function ControlSettings() {
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Server Control Settings</h2>
+        <h2 className="text-lg font-semibold">OpenAI Realtime API Settings</h2>
       </div>
       <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Input label="Admin Secret (not stored)" placeholder="REALTIME_CONTROL_ADMIN_SECRET" value={adminSecret} onChange={(e) => setAdminSecret(e.target.value)} />
@@ -125,79 +113,71 @@ export default function ControlSettings() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Select 
-          label="Model" 
-          options={[
-            { label: 'gpt-realtime (Latest 2025)', value: 'gpt-realtime' },
-            { label: 'gpt-4o-realtime-preview', value: 'gpt-4o-realtime-preview' },
-            { label: 'gpt-4o-mini-realtime (Coming Soon)', value: 'gpt-4o-mini-realtime' }
-          ]} 
-          value={s.model || 'gpt-realtime'} 
-          onChange={(v) => setS({ ...s, model: v })} 
-        />
-        <Select 
           label="Voice" 
           options={[
             { label: 'Alloy (Default)', value: 'alloy' },
             { label: 'Echo', value: 'echo' },
-            { label: 'Shimmer', value: 'shimmer' },
-            { label: 'Nova (New 2025)', value: 'nova' },
-            { label: 'Sage (New 2025)', value: 'sage' }
+            { label: 'Shimmer', value: 'shimmer' }
           ]} 
           value={s.voice} 
           onChange={(v) => setS({ ...s, voice: v })} 
         />
-        <Select label="Tool Choice" options={[ 'auto','required','none' ].map(v => ({ label: v, value: v }))} value={s.tool_choice} onChange={(v) => setS({ ...s, tool_choice: v as any })} />
-        <div>
-          <label className="mb-1 block text-sm text-neutral-300">Modalities</label>
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={s.modalities?.includes('audio') || false} onChange={(e) => {
-              const set = new Set(s.modalities || [])
-              e.target.checked ? set.add('audio') : set.delete('audio')
-              setS({ ...s, modalities: Array.from(set) as any })
-            }} /> audio</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={s.modalities?.includes('text') || false} onChange={(e) => {
-              const set = new Set(s.modalities || [])
-              e.target.checked ? set.add('text') : set.delete('text')
-              setS({ ...s, modalities: Array.from(set) as any })
-            }} /> text</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={s.modalities?.includes('image') || false} onChange={(e) => {
-              const set = new Set(s.modalities || [])
-              e.target.checked ? set.add('image') : set.delete('image')
-              setS({ ...s, modalities: Array.from(set) as any })
-            }} /> image (2025)</label>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm text-neutral-300">Temperature: {s.temperature}</label>
-          <input type="range" min={0} max={2} step={0.1} value={s.temperature ?? 0.7} onChange={(e) => setS({ ...s, temperature: parseFloat(e.target.value) })} />
-        </div>
-        <Input 
-          label="Max Response Tokens (blank=4096)" 
-          placeholder="4096" 
-          value={s.max_response_output_tokens ?? '' as any} 
-          onChange={(e) => setS({ ...s, max_response_output_tokens: e.target.value ? parseInt(e.target.value, 10) : null })} 
+        <Select 
+          label="Tool Choice" 
+          options={[
+            { label: 'Auto', value: 'auto' },
+            { label: 'None', value: 'none' },
+            { label: 'Required', value: 'required' },
+            { label: 'Custom Function...', value: '__custom__' }
+          ]} 
+          value={typeof s.tool_choice === 'string' && !['auto', 'none', 'required'].includes(s.tool_choice) ? '__custom__' : s.tool_choice} 
+          onChange={(v) => {
+            if (v === '__custom__') {
+              setS({ ...s, tool_choice: '' });
+            } else {
+              setS({ ...s, tool_choice: v as any });
+            }
+          }} 
         />
         <Select 
           label="Input Audio Format" 
           options={[
             { label: 'PCM16 24kHz', value: 'pcm16' },
-            { label: 'G.711 μ-law (Telephony)', value: 'g711_ulaw' },
-            { label: 'G.711 A-law', value: 'g711_alaw' }
+            { label: 'G.711 μ-law (Telephony)', value: 'g711_ulaw' }
           ]} 
           value={s.input_audio_format || 'pcm16'} 
           onChange={(v) => setS({ ...s, input_audio_format: v })} 
         />
       </div>
+      
+      {typeof s.tool_choice === 'string' && !['auto', 'none', 'required', '__custom__'].includes(s.tool_choice) && (
+        <div className="mt-2">
+          <Input 
+            label="Custom Tool/Function Name" 
+            value={s.tool_choice} 
+            onChange={(e) => setS({ ...s, tool_choice: e.target.value })} 
+            placeholder="my_function_name"
+          />
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-sm text-neutral-300">Temperature: {s.temperature}</label>
+          <input type="range" min={0} max={2} step={0.1} value={s.temperature ?? 0.8} onChange={(e) => setS({ ...s, temperature: parseFloat(e.target.value) })} />
+        </div>
+        <Input 
+          label="Max Response Tokens" 
+          type="number"
+          placeholder="4096" 
+          value={s.max_response_output_tokens ?? ''} 
+          onChange={(e) => setS({ ...s, max_response_output_tokens: e.target.value ? parseInt(e.target.value, 10) : null })} 
+        />
         <Select 
           label="Output Audio Format" 
           options={[
             { label: 'PCM16 24kHz', value: 'pcm16' },
-            { label: 'G.711 μ-law (Telephony)', value: 'g711_ulaw' },
-            { label: 'G.711 A-law', value: 'g711_alaw' }
+            { label: 'G.711 μ-law (Telephony)', value: 'g711_ulaw' }
           ]} 
           value={s.output_audio_format || 'pcm16'} 
           onChange={(v) => setS({ ...s, output_audio_format: v })} 
@@ -208,13 +188,12 @@ export default function ControlSettings() {
         <Select 
           label="Turn Detection" 
           options={[
-            { label: 'Server VAD (Silence-based)', value: 'server_vad' },
-            { label: 'Semantic VAD (AI-based, 2025)', value: 'semantic_vad' },
-            { label: 'None (Manual)', value: 'none' }
+            { label: 'Server VAD (Auto-detect speech)', value: 'server_vad' },
+            { label: 'None (Manual control)', value: 'none' }
           ]} 
           value={s.turn_detection?.type || 'server_vad'} 
           onChange={(v) => setS({ ...s, turn_detection: v === 'none' ? { type: 'none' } : { 
-            type: v as 'server_vad' | 'semantic_vad', 
+            type: 'server_vad', 
             threshold: vad.threshold ?? 0.5, 
             prefix_padding_ms: vad.prefix_padding_ms ?? 300, 
             silence_duration_ms: vad.silence_duration_ms ?? 500, 
@@ -228,7 +207,7 @@ export default function ControlSettings() {
               <input type="range" min={0} max={1} step={0.01} value={vad.threshold ?? 0.5} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', threshold: parseFloat(e.target.value) } })} />
             </div>
             <Input label="Prefix Padding (ms)" type="number" value={vad.prefix_padding_ms ?? 300} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', prefix_padding_ms: parseInt(e.target.value, 10) } })} />
-            <Input label="Silence Duration (ms)" type="number" value={vad.silence_duration_ms ?? 200} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', silence_duration_ms: parseInt(e.target.value, 10) } })} />
+            <Input label="Silence Duration (ms)" type="number" value={vad.silence_duration_ms ?? 500} onChange={(e) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', silence_duration_ms: parseInt(e.target.value, 10) } })} />
           </>
         )}
       </div>
@@ -237,7 +216,7 @@ export default function ControlSettings() {
           <Toggle 
             label="Auto Create Response" 
             checked={vad.create_response ?? true} 
-            onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: s.turn_detection?.type as any, create_response: v } })} 
+            onChange={(v) => setS({ ...s, turn_detection: { ...vad, type: 'server_vad', create_response: v } })} 
             hint="Automatically generate response after user turn ends." 
           />
         </div>
@@ -255,10 +234,28 @@ export default function ControlSettings() {
       </div>
 
       <div className="mt-6">
-        <label className="mb-1 block text-sm text-neutral-300">Tools (JSON array) - MCP Support (2025)</label>
+        <label className="mb-1 block text-sm text-neutral-300">Tools (JSON array)</label>
         <textarea
           className="h-40 w-full rounded-md border border-neutral-800 bg-neutral-950 p-2 font-mono text-xs text-white outline-none focus:border-brand-500"
-          placeholder='[\n  {\n    "type": "mcp_server",\n    "name": "filesystem",\n    "server_url": "ws://localhost:8765",\n    "tools": ["read_file", "write_file"]\n  },\n  {\n    "type": "function",\n    "function": {\n      "name": "get_weather",\n      "description": "Get weather for a location",\n      "parameters": {}\n    }\n  }\n]'
+          placeholder='[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name"
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  }
+]'
           value={rawTools}
           onChange={(e) => setRawTools(e.target.value)}
         />
@@ -268,13 +265,13 @@ export default function ControlSettings() {
               const parsed = rawTools ? JSON.parse(rawTools) : []
               if (!Array.isArray(parsed)) throw new Error('Must be an array')
               setS({ ...s, tools: parsed })
-              toast.success('Tools updated in memory')
+              toast.success('Tools updated')
             } catch (e: any) {
               toast.error(e?.message || 'Invalid JSON')
             }
           }}>Apply Tools</Button>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">Define function tools or MCP servers. Supports async function calls (2025).</p>
+        <p className="mt-1 text-xs text-neutral-500">Define function tools for the assistant to use. Must be valid JSON array.</p>
       </div>
 
       <div className="mt-4">
@@ -297,25 +294,6 @@ export default function ControlSettings() {
           )}
         </div>
         <p className="mt-1 text-xs text-neutral-500">Transcribe user audio input for logging and analysis.</p>
-      </div>
-
-      <div className="mt-4">
-        <h3 className="mb-2 text-sm font-medium text-neutral-300">Reusable Prompt (2025 Feature)</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Input 
-            label="Prompt ID" 
-            placeholder="prompt_abc123" 
-            value={s.prompt?.id || ''} 
-            onChange={(e) => setS({ ...s, prompt: e.target.value ? { ...s.prompt, id: e.target.value } : undefined })} 
-          />
-          <Input 
-            label="Prompt Version (Optional)" 
-            placeholder="v1.0" 
-            value={s.prompt?.version || ''} 
-            onChange={(e) => setS({ ...s, prompt: s.prompt ? { ...s.prompt, version: e.target.value || undefined } : undefined })} 
-          />
-        </div>
-        <p className="mt-1 text-xs text-neutral-500">Use saved prompts across sessions for consistency.</p>
       </div>
     </section>
   )

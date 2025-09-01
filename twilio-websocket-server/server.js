@@ -149,48 +149,55 @@ wss.on('connection', async (twilioWS, request) => {
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
         
-        // Configure session for G.711 μ-law with OpenAI Realtime API
+        // Configure session according to OpenAI Realtime API documentation
+        // Valid parameters for session.update (confirmed from API docs):
+        const sessionConfig = {
+          // Audio configuration
+          input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
+          output_audio_format: 'g711_ulaw',  // Match Twilio format
+          
+          // Voice selection (valid options: alloy, echo, shimmer)
+          voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
+          
+          // System instructions
+          instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.',
+          
+          // Turn detection (VAD) configuration
+          turn_detection: {
+            type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
+            threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
+            prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
+            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
+            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE !== 'false'  // Default true
+          },
+          
+          // Input audio transcription (optional)
+          input_audio_transcription: process.env.REALTIME_TRANSCRIBE_INPUT === 'true' ? {
+            model: 'whisper-1'
+          } : null,
+          
+          // Tools array (for function calling)
+          tools: process.env.REALTIME_TOOLS ? JSON.parse(process.env.REALTIME_TOOLS) : [],
+          
+          // Tool choice strategy
+          tool_choice: process.env.REALTIME_TOOL_CHOICE || 'auto',  // auto, none, required, or function name
+          
+          // Response generation parameters
+          temperature: parseFloat(process.env.REALTIME_TEMPERATURE || '0.8'),
+          max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096
+        };
+        
+        // Remove null/undefined values to avoid API errors
+        const cleanSession = {};
+        for (const [key, value] of Object.entries(sessionConfig)) {
+          if (value !== null && value !== undefined) {
+            cleanSession[key] = value;
+          }
+        }
+        
         const sessionUpdate = {
           type: 'session.update',
-          session: {
-            // Note: 'type' and 'modalities' are NOT valid session parameters
-            // They are only used when creating ephemeral tokens, not in session.update
-            
-            // Audio format configuration
-            input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
-            output_audio_format: 'g711_ulaw',  // Match Twilio format
-            
-            // Voice options: alloy, echo, shimmer, nova, sage
-            voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
-            
-            // Instructions for the assistant
-            instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.',
-            
-            // Turn detection configuration
-            turn_detection: {
-              type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
-              threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
-              prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
-              silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
-            },
-            
-            // Optional: Enable input audio transcription
-            input_audio_transcription: process.env.REALTIME_TRANSCRIBE_INPUT === 'true' ? {
-              model: 'whisper-1'
-            } : null,
-            
-            // Optional: Tools configuration (for function calling)
-            tools: [],  // Add tools here if needed
-            
-            // Optional: Tool choice
-            tool_choice: 'auto',  // auto, none, required, or specific function
-            
-            // Temperature for response generation
-            temperature: parseFloat(process.env.REALTIME_TEMPERATURE || '0.8'),
-            
-            // Max response output tokens (text + audio)
-            max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096')
-          }
+          session: cleanSession
         };
         
         oaiWS.send(JSON.stringify(sessionUpdate));
@@ -241,6 +248,9 @@ wss.on('connection', async (twilioWS, request) => {
       case 'conversation.item.created':
         if (msg.item?.type === 'message' && msg.item?.role === 'assistant') {
           console.log('Assistant message created:', msg.item?.id);
+          if (msg.item?.id) {
+            state.lastAssistantItem = msg.item.id;
+          }
         }
         break;
         
@@ -301,6 +311,9 @@ wss.on('connection', async (twilioWS, request) => {
         
       case 'response.output_item.added':
         console.log('Output item added:', msg.item?.id);
+        if (msg.item?.id) {
+          state.lastAssistantItem = msg.item.id;
+        }
         break;
         
       case 'response.output_item.done':
@@ -434,19 +447,22 @@ wss.on('connection', async (twilioWS, request) => {
           if (msg.mark?.name === 'commit' && oaiWS && oaiWS.readyState === WebSocket.OPEN) {
             // Manually commit audio buffer and create response
             oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-            oaiWS.send(JSON.stringify({ 
-              type: 'response.create',
-              response: {
-                modalities: ['audio', 'text'],
-                instructions: null,  // Use session instructions
-                voice: null,  // Use session voice
-                output_audio_format: 'g711_ulaw',
-                tools: [],
-                tool_choice: 'auto',
-                temperature: null,  // Use session temperature
-                max_output_tokens: null  // Use session max tokens
+            
+            // response.create with minimal overrides (all optional)
+            const responseCreate = { type: 'response.create' };
+            
+            // Only add response config if we have specific overrides
+            if (process.env.REALTIME_RESPONSE_VOICE || process.env.REALTIME_RESPONSE_TEMPERATURE) {
+              responseCreate.response = {};
+              if (process.env.REALTIME_RESPONSE_VOICE) {
+                responseCreate.response.voice = process.env.REALTIME_RESPONSE_VOICE;
               }
-            }));
+              if (process.env.REALTIME_RESPONSE_TEMPERATURE) {
+                responseCreate.response.temperature = parseFloat(process.env.REALTIME_RESPONSE_TEMPERATURE);
+              }
+            }
+            
+            oaiWS.send(JSON.stringify(responseCreate));
             console.log('Manual turn commit with response creation');
           }
           break;
