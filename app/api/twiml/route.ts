@@ -112,11 +112,18 @@ export async function GET(req: NextRequest) {
   }
   
   if (mode === 'stream') {
-    const u = new URL(req.url)
-    const base = (process.env.PUBLIC_BASE_URL || `${u.protocol}//${u.host}`).replace(/\/$/, '')
-    const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
-    // Pass the secret as a query parameter to the WebSocket
-    const streamUrl = `${wsBase}/api/stream/twilio?secret=${encodeURIComponent(secret)}`
+    // Use external WebSocket URL if configured (e.g., Railway deployment)
+    let streamUrl: string
+    if (process.env.TWILIO_WEBSOCKET_URL) {
+      // External WebSocket server (Railway, Render, etc.)
+      streamUrl = `${process.env.TWILIO_WEBSOCKET_URL}?secret=${encodeURIComponent(secret)}`
+    } else {
+      // Fallback to local WebSocket (won't work on Vercel)
+      const u = new URL(req.url)
+      const base = (process.env.PUBLIC_BASE_URL || `${u.protocol}//${u.host}`).replace(/\/$/, '')
+      const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+      streamUrl = `${wsBase}/api/stream/twilio?secret=${encodeURIComponent(secret)}`
+    }
     const statusCb = process.env.TWILIO_STREAM_STATUS_CALLBACK_URL
     const statusAttr = statusCb ? ` statusCallback=\"${escapeXml(statusCb)}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
     const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${escapeXml(streamUrl)}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
