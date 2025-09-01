@@ -116,7 +116,9 @@ export async function GET(req: NextRequest) {
     let streamUrl: string
     if (process.env.TWILIO_WEBSOCKET_URL) {
       // External WebSocket server (Railway, Render, etc.)
-      streamUrl = `${process.env.TWILIO_WEBSOCKET_URL}?secret=${encodeURIComponent(secret)}`
+      // Railway strips query params, so we encode the secret in the path
+      const wsBase = process.env.TWILIO_WEBSOCKET_URL.replace(/\/$/, '')
+      streamUrl = `${wsBase}/${encodeURIComponent(secret)}`
     } else {
       // Fallback to local WebSocket (won't work on Vercel)
       const u = new URL(req.url)

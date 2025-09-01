@@ -77,32 +77,36 @@ wss.on('connection', async (twilioWS, request) => {
   console.log('Full URL:', request.url);
   console.log('Headers:', JSON.stringify(request.headers, null, 2));
   
-  // Parse query parameters to get the secret
+  // Parse secret from URL path or query parameters
   const fullUrl = request.url || '';
   console.log('Parsing URL:', fullUrl);
   
   // Try multiple ways to get the secret
   let providedSecret = null;
   
-  // Method 1: Direct query parameter
-  if (fullUrl.includes('?')) {
+  // Method 1: Extract from path (for Railway which strips query params)
+  // Expected format: /ek_xxxxx or /ek%5Fxxxxx (URL encoded)
+  if (fullUrl.startsWith('/')) {
+    const pathSegment = fullUrl.split('?')[0].substring(1); // Remove leading /
+    if (pathSegment) {
+      providedSecret = decodeURIComponent(pathSegment);
+      console.log('Method 1 - Path secret:', providedSecret ? providedSecret.substring(0, 10) + '...' : 'Not found');
+    }
+  }
+  
+  // Method 2: Direct query parameter (for local dev)
+  if (!providedSecret && fullUrl.includes('?')) {
     const queryString = fullUrl.split('?')[1];
     const params = new URLSearchParams(queryString);
     providedSecret = params.get('secret');
-    console.log('Method 1 - Query param secret:', providedSecret ? 'Found' : 'Not found');
+    console.log('Method 2 - Query param secret:', providedSecret ? 'Found' : 'Not found');
   }
   
-  // Method 2: Parse with url module
+  // Method 3: Parse with url module (backup)
   if (!providedSecret) {
     const queryParams = url.parse(fullUrl, true).query;
     providedSecret = queryParams.secret;
-    console.log('Method 2 - URL parse secret:', providedSecret ? 'Found' : 'Not found');
-  }
-  
-  // Method 3: Check custom header (backup)
-  if (!providedSecret) {
-    providedSecret = request.headers['x-openai-secret'];
-    console.log('Method 3 - Header secret:', providedSecret ? 'Found' : 'Not found');
+    console.log('Method 3 - URL parse secret:', providedSecret ? 'Found' : 'Not found');
   }
   
   if (!providedSecret) {
