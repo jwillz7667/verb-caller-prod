@@ -216,12 +216,9 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           }
         }
         
-        const sessionUpdate = {
-          type: 'session.update',
-          session: cleanSession
-        };
-        
-        oaiWS.send(JSON.stringify(sessionUpdate));
+        // Store config for later use after session.created
+        state.pendingSessionConfig = cleanSession;
+        console.log('Session config prepared, waiting for session.created event...');
       });
       
       oaiWS.on('message', (data) => {
@@ -255,6 +252,17 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
       // Session events
       case 'session.created':
         console.log('Session created:', msg.session?.id);
+        
+        // Now send the session.update with our configuration
+        if (state.pendingSessionConfig) {
+          const sessionUpdate = {
+            type: 'session.update',
+            session: state.pendingSessionConfig
+          };
+          console.log('Sending session.update after session.created');
+          oaiWS.send(JSON.stringify(sessionUpdate));
+          state.pendingSessionConfig = null;
+        }
         break;
         
       case 'session.updated':
