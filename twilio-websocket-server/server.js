@@ -171,13 +171,9 @@ wss.on('connection', async (twilioWS, request) => {
         console.log('Connected to OpenAI');
         
         // Configure session according to OpenAI Realtime API documentation
-        // Note: modalities is set in token creation, not session.update
+        // Note: modalities and audio formats are set in token creation, not session.update
         const sessionConfig = {
-          // Audio configuration - use string literals
-          input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
-          output_audio_format: 'g711_ulaw',  // Match Twilio format
-          
-          // Voice selection (valid options: alloy, echo, shimmer)
+          // Voice selection (all 11 available voices)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
           // System instructions (following OpenAI cookbook best practices)
@@ -192,8 +188,7 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
             type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
             threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
             prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
-            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
-            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE !== 'false'  // Default true
+            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500')
           },
           
           // Input audio transcription (optional)
