@@ -81,7 +81,6 @@ Note: You can provide either `session.instructions` or `session.prompt` (or both
   - `REALTIME_VAD_THRESHOLD=0.5`
   - `REALTIME_VAD_PREFIX_MS=300`
   - `REALTIME_VAD_SILENCE_MS=200`
-  - `REALTIME_VAD_SEMANTIC=false` (experimental semantic VAD)
 - Noise reduction: `REALTIME_NOISE_REDUCTION=near_field|none`
 - Input audio: `REALTIME_INPUT_AUDIO_RATE=24000`
 - Transcription:

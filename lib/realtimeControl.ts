@@ -62,8 +62,6 @@ export function buildServerUpdateFromEnv() {
     create_response: true,
     interrupt_response: true,
   }
-  const semantic = parseMaybeBool(process.env.REALTIME_VAD_SEMANTIC)
-  if (typeof semantic === 'boolean') (vad as any).semantic = semantic
   const turn_detection: TurnDetectionNone | TurnDetectionVad = turnType === 'none' ? { type: 'none' } : vad
 
   const noiseReduction = (process.env.REALTIME_NOISE_REDUCTION || 'near_field') as 'near_field' | 'far_field' | 'none'

@@ -121,11 +121,13 @@ export default function ControlSettings() {
             { label: 'Nova (Energetic)', value: 'nova' },
             { label: 'Onyx (Authoritative)', value: 'onyx' },
             { label: 'Fable (British)', value: 'fable' },
-            { label: 'Ash (NEW - Expressive)', value: 'ash' },
-            { label: 'Ballad (NEW - Emotive)', value: 'ballad' },
-            { label: 'Coral (NEW - Pleasant)', value: 'coral' },
-            { label: 'Sage (NEW - Thoughtful)', value: 'sage' },
-            { label: 'Verse (NEW - Dynamic)', value: 'verse' }
+            { label: 'Ash (Expressive)', value: 'ash' },
+            { label: 'Ballad (Emotive)', value: 'ballad' },
+            { label: 'Coral (Pleasant)', value: 'coral' },
+            { label: 'Sage (Thoughtful)', value: 'sage' },
+            { label: 'Verse (Dynamic)', value: 'verse' },
+            { label: 'Cedar (NEW Sept 2025)', value: 'cedar' },
+            { label: 'Marin (NEW Sept 2025)', value: 'marin' }
           ]} 
           value={s.voice} 
           onChange={(v) => setS({ ...s, voice: v })} 
