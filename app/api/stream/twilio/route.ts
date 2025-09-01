@@ -246,20 +246,9 @@ class RealtimeConnectionManager {
         this.oaiReady = true
         this.startHeartbeat()
         
-        // Configure session - use custom settings if available, otherwise env defaults
-        const sessionUpdate = buildServerUpdate()  // This checks for custom settings first
-        
-        // Override for G.711 μ-law passthrough mode (Twilio always uses G.711)
-        if (sessionUpdate && typeof sessionUpdate === 'object' && (sessionUpdate as any).session) {
-          // Merge the audio formats without losing other properties
-          (sessionUpdate as any).session = {
-            ...(sessionUpdate as any).session,
-            input_audio_format: 'g711_ulaw',
-            output_audio_format: 'g711_ulaw',
-          }
-        }
-        
-        this.oaiWS!.send(JSON.stringify(sessionUpdate))
+        // Wait for session.created event before sending session.update
+        // OpenAI might have changed to require waiting for session.created first
+        console.log('WebSocket connected, waiting for session.created before sending update...')
         resolve(this.oaiWS!)
       })
       
@@ -395,6 +384,27 @@ export async function GET(request: Request) {
   // Handle OpenAI Realtime messages
   const handleOpenAIMessage = async (msg: any) => {
     switch (msg.type) {
+      case 'session.created':
+        console.log('Session created:', msg.session?.id)
+        
+        // Now send the session.update with our configuration
+        const sessionUpdate = buildServerUpdate()
+        if (sessionUpdate && typeof sessionUpdate === 'object' && (sessionUpdate as any).session) {
+          // Override for G.711 μ-law passthrough mode
+          (sessionUpdate as any).session = {
+            ...(sessionUpdate as any).session,
+            input_audio_format: 'g711_ulaw',
+            output_audio_format: 'g711_ulaw',
+          }
+        }
+        
+        console.log('Sending session.update:', JSON.stringify(sessionUpdate, null, 2))
+        const oaiWS = connectionManager.socket
+        if (oaiWS) {
+          oaiWS.send(JSON.stringify(sessionUpdate))
+        }
+        break
+        
       case 'response.audio.delta':
         // G.711 μ-law audio passthrough
         if (msg.delta) {
