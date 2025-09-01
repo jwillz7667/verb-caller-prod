@@ -72,10 +72,18 @@ export async function GET(req: NextRequest) {
         session: { 
           type: 'realtime', 
           model,
+          // Essential for telephony - set modalities and audio formats
+          modalities: ['audio', 'text'],  // Both audio and text for telephony
+          input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
+          output_audio_format: 'g711_ulaw', // Match Twilio format
           // Apply custom settings if available
           ...(customSettings?.voice && { voice: customSettings.voice }),
           ...(customSettings?.temperature && { temperature: customSettings.temperature }),
           ...(customSettings?.max_response_output_tokens && { max_response_output_tokens: customSettings.max_response_output_tokens }),
+          ...(customSettings?.turn_detection && { turn_detection: customSettings.turn_detection }),
+          ...(customSettings?.tools && { tools: customSettings.tools }),
+          ...(customSettings?.tool_choice && { tool_choice: customSettings.tool_choice }),
+          ...(customSettings?.input_audio_transcription && { input_audio_transcription: customSettings.input_audio_transcription }),
         }
       }
       if (instructions && instructions.trim().length > 0) payload.session.instructions = instructions

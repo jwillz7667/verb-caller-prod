@@ -27,22 +27,31 @@ export async function POST(req: NextRequest) {
     // Merge custom settings with the ephemeral request
     // Priority: Custom settings from UI > Request body > Environment defaults
     let ephemeralPayload = data.ephemeral
-    if (customSettings && ephemeralPayload?.session) {
-      // Create merged session with proper typing
-      const mergedSession: any = {
-        ...ephemeralPayload.session,
-        // Apply saved settings (these override the form values)
-        ...(customSettings.voice && { voice: customSettings.voice }),
-        ...(customSettings.instructions && { instructions: customSettings.instructions }),
-        ...(customSettings.temperature !== undefined && { temperature: customSettings.temperature }),
-        ...(customSettings.max_response_output_tokens !== undefined && { 
-          max_response_output_tokens: customSettings.max_response_output_tokens 
-        }),
-        ...(customSettings.turn_detection && { turn_detection: customSettings.turn_detection }),
-        ...(customSettings.tools && { tools: customSettings.tools }),
-        ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice as any }),
+    if (ephemeralPayload?.session) {
+      // Ensure audio formats are set for telephony
+      ephemeralPayload.session.input_audio_format = 'g711_ulaw'
+      ephemeralPayload.session.output_audio_format = 'g711_ulaw'
+      ephemeralPayload.session.modalities = ['audio', 'text']
+      
+      // Apply custom settings if available
+      if (customSettings) {
+        // Create merged session with proper typing
+        const mergedSession: any = {
+          ...ephemeralPayload.session,
+          // Apply saved settings (these override the form values)
+          ...(customSettings.voice && { voice: customSettings.voice }),
+          ...(customSettings.instructions && { instructions: customSettings.instructions }),
+          ...(customSettings.temperature !== undefined && { temperature: customSettings.temperature }),
+          ...(customSettings.max_response_output_tokens !== undefined && { 
+            max_response_output_tokens: customSettings.max_response_output_tokens 
+          }),
+          ...(customSettings.turn_detection && { turn_detection: customSettings.turn_detection }),
+          ...(customSettings.tools && { tools: customSettings.tools }),
+          ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice as any }),
+          ...(customSettings.input_audio_transcription && { input_audio_transcription: customSettings.input_audio_transcription }),
+        }
+        ephemeralPayload.session = mergedSession
       }
-      ephemeralPayload.session = mergedSession
     }
 
     // Create ephemeral client secret with merged settings

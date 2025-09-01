@@ -4,17 +4,38 @@ import type { EphemeralRequest } from './validation'
 function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   // Deep clone to avoid mutating caller input
   const body: any = JSON.parse(JSON.stringify(payload))
-  const allowedSession = new Set(['type', 'model', 'instructions', 'prompt'])
+  
+  // Allow all valid session parameters for ephemeral token creation
+  // Based on OpenAI Realtime API documentation
+  const allowedSession = new Set([
+    'type',
+    'model', 
+    'instructions',
+    'prompt',
+    'voice',
+    'modalities',
+    'input_audio_format',
+    'output_audio_format',
+    'input_audio_transcription',
+    'turn_detection',
+    'tools',
+    'tool_choice',
+    'temperature',
+    'max_response_output_tokens'
+  ])
+  
   const s = body.session || {}
   const filteredSession: Record<string, any> = {}
   for (const k of Object.keys(s)) {
     if (allowedSession.has(k)) filteredSession[k] = s[k]
   }
+  
   // Normalize prompt.version to string if provided as number
   if (filteredSession.prompt && typeof filteredSession.prompt === 'object') {
     const v = filteredSession.prompt.version
     if (typeof v === 'number') filteredSession.prompt.version = String(v)
   }
+  
   // Only keep top-level fields allowed by the endpoint
   // NOTE: OpenAI's ephemeral token endpoint does NOT accept 'server' parameter
   const cleaned: any = {
