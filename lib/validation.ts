@@ -30,15 +30,25 @@ const RealtimeSessionCore = z.object({
   max_response_output_tokens: z.union([z.literal('inf'), z.number().int().min(1), z.null()]).optional(),
   modalities: z.array(z.enum(['audio', 'text'])).default(['audio']),
   voice: z.string().default('alloy'),
-  turn_detection: z.object({
-    type: z.enum(['none', 'server_vad']).default('server_vad'),
-    threshold: z.number().min(0).max(1).default(0.5),
-    prefix_padding_ms: z.number().int().min(0).max(2000).default(300),
-    silence_duration_ms: z.number().int().min(50).max(5000).default(200),
-    idle_timeout_ms: z.number().int().nullable().optional(),
-    create_response: z.boolean().default(true),
-    interrupt_response: z.boolean().default(true),
-  }).default({ type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 200, create_response: true, interrupt_response: true }),
+  turn_detection: z.union([
+    z.object({
+      type: z.literal('none')
+    }),
+    z.object({
+      type: z.literal('server_vad'),
+      threshold: z.number().min(0).max(1).default(0.5),
+      prefix_padding_ms: z.number().int().min(0).max(2000).default(300),
+      silence_duration_ms: z.number().int().min(50).max(5000).default(200),
+      create_response: z.boolean().default(true),
+      interrupt_response: z.boolean().default(true),
+    }),
+    z.object({
+      type: z.literal('semantic_vad'),
+      eagerness: z.enum(['auto', 'low', 'medium', 'high']).default('auto'),
+      create_response: z.boolean().default(true),
+      interrupt_response: z.boolean().default(true),
+    })
+  ]).default({ type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 200, create_response: true, interrupt_response: true }),
   input_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('pcm16').optional(),
   output_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('pcm16').optional(),
   input_audio_transcription: z.object({
