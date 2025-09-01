@@ -73,6 +73,9 @@ export function buildServerUpdateFromEnv() {
 
   const noiseReduction = (process.env.REALTIME_NOISE_REDUCTION || 'near_field') as 'near_field' | 'far_field' | 'none'
   const inputRate = parseMaybeInt(process.env.REALTIME_INPUT_AUDIO_RATE, 24000)!
+  const realtimeMode = (process.env.REALTIME_MODE || process.env.TWIML_DEFAULT_MODE || '').toLowerCase()
+  const preferCodec = (process.env.REALTIME_AUDIO_CODEC || '').toLowerCase()
+  const useG711 = realtimeMode === 'sip' || preferCodec === 'g711_ulaw' || preferCodec === 'g711'
 
   const transcriptionEnabled = (process.env.REALTIME_TRANSCRIPTION_ENABLED || 'false').toLowerCase() === 'true'
   const transcription = transcriptionEnabled
@@ -93,9 +96,15 @@ export function buildServerUpdateFromEnv() {
   if (typeof temperature === 'number') session.temperature = temperature
   if (typeof maxTokens === 'number') session.max_output_tokens = maxTokens
   session.turn_detection = turn_detection
-  session.input_audio_format = { type: 'audio/pcm', rate: inputRate }
-  // Match output format to our Twilio bridge expectations (PCM16 24kHz)
-  session.output_audio_format = { type: 'audio/pcm', rate: inputRate }
+  if (useG711) {
+    // For SIP, prefer G.711 μ-law passthrough
+    session.input_audio_format = 'g711_ulaw'
+    session.output_audio_format = 'g711_ulaw'
+  } else {
+    session.input_audio_format = { type: 'audio/pcm', rate: inputRate }
+    // Match output format to our Twilio bridge expectations (PCM16 24kHz)
+    session.output_audio_format = { type: 'audio/pcm', rate: inputRate }
+  }
   if (transcription) session.transcription = transcription
   session.noise_reduction = noiseReduction
 
