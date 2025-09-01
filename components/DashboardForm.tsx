@@ -596,6 +596,41 @@ export default function DashboardForm() {
                 <input type="range" min={0} max={2} step={0.1} {...form.register('temperature', { valueAsNumber: true })} />
               </div>
               <Input label="Max Tokens" placeholder="inf or number" {...form.register('max_output_tokens')} />
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Modalities</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={form.watch('modalities').includes('audio')} 
+                  onChange={(e) => {
+                    const current = form.getValues('modalities')
+                    if (e.target.checked) {
+                      form.setValue('modalities', [...current, 'audio'])
+                    } else {
+                      form.setValue('modalities', current.filter(m => m !== 'audio'))
+                    }
+                  }}
+                />
+                <span className="text-sm">Audio</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={form.watch('modalities').includes('text')} 
+                  onChange={(e) => {
+                    const current = form.getValues('modalities')
+                    if (e.target.checked) {
+                      form.setValue('modalities', [...current, 'text'])
+                    } else {
+                      form.setValue('modalities', current.filter(m => m !== 'text'))
+                    }
+                  }}
+                />
+                <span className="text-sm">Text</span>
+              </label>
+            </div>
+          </div>
               <Textarea label="Instructions" rows={5} {...form.register('instructions')} />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <Input label="Prompt ID" placeholder="pmpt_..." {...form.register('promptId')} />
@@ -802,7 +837,26 @@ export default function DashboardForm() {
             <Select label="Model" options={[{label:'gpt-realtime', value:'gpt-realtime'},{label:'gpt-4o-realtime-preview', value:'gpt-4o-realtime-preview'}]} value={field.value} onChange={field.onChange} />
           )} />
           <Controller control={form.control} name="voice" render={({ field }) => (
-            <Select label="Voice" options={['alloy','echo','fable','onyx','nova','shimmer','verse','aria','custom'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
+            <Select 
+              label="Voice" 
+              options={[
+                { label: 'Alloy (Default)', value: 'alloy' },
+                { label: 'Echo', value: 'echo' },
+                { label: 'Shimmer', value: 'shimmer' },
+                { label: 'Nova', value: 'nova' },
+                { label: 'Onyx', value: 'onyx' },
+                { label: 'Fable', value: 'fable' },
+                { label: 'Ash', value: 'ash' },
+                { label: 'Ballad', value: 'ballad' },
+                { label: 'Coral', value: 'coral' },
+                { label: 'Sage', value: 'sage' },
+                { label: 'Verse', value: 'verse' },
+                { label: 'Cedar (NEW)', value: 'cedar' },
+                { label: 'Marin (NEW)', value: 'marin' }
+              ]} 
+              value={field.value} 
+              onChange={field.onChange} 
+            />
           )} />
           <Controller control={form.control} name="tool_choice" render={({ field }) => (
             <Select label="Tool Choice" options={['auto','required','none'].map(v=>({label:v,value:v}))} value={field.value} onChange={field.onChange} />
@@ -812,13 +866,57 @@ export default function DashboardForm() {
             <input type="range" min={0} max={2} step={0.1} {...form.register('temperature', { valueAsNumber: true })} />
           </div>
           <Input label="Max Tokens" placeholder="inf or number" {...form.register('max_output_tokens')} />
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Modalities</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={form.watch('modalities').includes('audio')} 
+                  onChange={(e) => {
+                    const current = form.getValues('modalities')
+                    if (e.target.checked) {
+                      form.setValue('modalities', [...current, 'audio'])
+                    } else {
+                      form.setValue('modalities', current.filter(m => m !== 'audio'))
+                    }
+                  }}
+                />
+                <span className="text-sm">Audio</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={form.watch('modalities').includes('text')} 
+                  onChange={(e) => {
+                    const current = form.getValues('modalities')
+                    if (e.target.checked) {
+                      form.setValue('modalities', [...current, 'text'])
+                    } else {
+                      form.setValue('modalities', current.filter(m => m !== 'text'))
+                    }
+                  }}
+                />
+                <span className="text-sm">Text</span>
+              </label>
+            </div>
+          </div>
           <Textarea label="Instructions" rows={5} {...form.register('instructions')} />
           <div className="grid grid-cols-2 gap-2">
             <Input label="Prompt ID" placeholder="pmpt_..." {...form.register('promptId')} />
             <Input label="Version" placeholder="2" {...form.register('promptVersion')} />
           </div>
           <Controller control={form.control} name="turn_detection" render={({ field }) => (
-            <Select label="Turn Detection" options={[{label:'server_vad', value:'server_vad'},{label:'none', value:'none'}]} value={field.value} onChange={field.onChange} />
+            <Select 
+              label="Turn Detection" 
+              options={[
+                {label:'Server VAD (Silence-based)', value:'server_vad'},
+                {label:'Semantic VAD (AI-based)', value:'semantic_vad'},
+                {label:'None', value:'none'}
+              ]} 
+              value={field.value} 
+              onChange={field.onChange} 
+            />
           )} />
           {form.watch('turn_detection') === 'server_vad' && (
             <>
@@ -891,8 +989,10 @@ export default function DashboardForm() {
           {form.watch('transcription_enabled') && (
             <>
               <Input label="Transcription Model" {...form.register('transcription_model')} />
-              <Input label="Language" {...form.register('transcription_language')} />
-              <Input label="Prompt" {...form.register('transcription_prompt')} />
+              <Input label="Language" placeholder="en" {...form.register('transcription_language')} />
+              <Input label="Prompt" placeholder="Optional prompt" {...form.register('transcription_prompt')} />
+              <Toggle label="Include Logprobs" checked={!!form.watch('transcription_logprobs')} onChange={(v) => form.setValue('transcription_logprobs', v)} />
+              <Toggle label="Include Segments" checked={!!form.watch('transcription_segments')} onChange={(v) => form.setValue('transcription_segments', v)} />
             </>
           )}
           <div>
