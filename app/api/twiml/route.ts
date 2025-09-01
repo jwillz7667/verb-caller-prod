@@ -101,6 +101,16 @@ export async function GET(req: NextRequest) {
       return new Response('<Response><Say>Forbidden</Say></Response>', { status: 403, headers: { 'Content-Type': 'text/xml' } })
     }
   }
+  
+  // Simple mode - just play a message for now
+  if (mode === 'simple') {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Hello! The AI voice system is currently being configured. WebSocket connections are not supported on Vercel. Please deploy the WebSocket endpoint to Railway or another platform that supports persistent connections.</Say>
+</Response>`
+    return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
+  }
+  
   if (mode === 'stream') {
     const u = new URL(req.url)
     const base = (process.env.PUBLIC_BASE_URL || `${u.protocol}//${u.host}`).replace(/\/$/, '')

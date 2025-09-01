@@ -32,8 +32,9 @@ export async function POST(req: NextRequest) {
     if (!from) return Response.json({ error: 'Twilio from number missing' }, { status: 400 })
 
     const base = resolveBaseUrl(req.url)
-    // Use Media Streams mode (WebSocket bridge)
-    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=stream`
+    // For now, use a simple TwiML response that plays a message
+    // TODO: Deploy WebSocket endpoint to a platform that supports it (Railway, Render, etc.)
+    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=simple`
 
     const callCreatePayload: any = {
       to: data.toNumber,
