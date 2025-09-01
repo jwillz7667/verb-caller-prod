@@ -46,8 +46,8 @@ export type DashboardValues = {
   vad_create_response?: boolean
   vad_interrupt_response?: boolean
   vad_idle_timeout_ms?: number | ''
-  input_audio_type: 'audio/pcm'
-  input_audio_rate: number
+  input_audio_format: 'pcm16' | 'g711_ulaw' | 'g711_alaw'
+  output_audio_format: 'pcm16' | 'g711_ulaw' | 'g711_alaw'
   transcription_enabled: boolean
   transcription_model: string
   transcription_prompt?: string
@@ -82,8 +82,8 @@ export default function DashboardForm() {
         vad_threshold: z.number().min(0).max(1).default(0.5),
         vad_prefix_padding_ms: z.number().min(0).max(2000).default(300),
         vad_silence_duration_ms: z.number().min(50).max(5000).default(200),
-        input_audio_type: z.literal('audio/pcm').default('audio/pcm'),
-        input_audio_rate: z.number().default(24000),
+        input_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('g711_ulaw'),
+        output_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('g711_ulaw'),
         transcription_enabled: z.boolean().default(false),
         transcription_model: z.string().default('gpt-4o-transcribe'),
         transcription_prompt: z.string().optional(),
@@ -118,8 +118,8 @@ export default function DashboardForm() {
       vad_create_response: true,
       vad_interrupt_response: true,
       vad_idle_timeout_ms: '' as any,
-      input_audio_type: 'audio/pcm',
-      input_audio_rate: 24000,
+      input_audio_format: 'g711_ulaw',
+      output_audio_format: 'g711_ulaw',
       transcription_enabled: false,
       transcription_model: 'gpt-4o-transcribe',
       noise_reduction: 'near_field',
@@ -153,8 +153,8 @@ export default function DashboardForm() {
       vad_threshold,
       vad_prefix_padding_ms,
       vad_silence_duration_ms,
-      input_audio_type,
-      input_audio_rate,
+      input_audio_format,
+      output_audio_format,
       transcription_enabled,
       transcription_model,
       transcription_prompt,
@@ -179,8 +179,8 @@ export default function DashboardForm() {
         vad_threshold,
         vad_prefix_padding_ms,
         vad_silence_duration_ms,
-        input_audio_type,
-        input_audio_rate,
+        input_audio_format,
+        output_audio_format,
         transcription_enabled,
         transcription_model,
         transcription_prompt,
@@ -278,7 +278,8 @@ export default function DashboardForm() {
               ...(values.vad_semantic ? { semantic: true } : {}),
               ...(values.vad_idle_timeout_ms ? { idle_timeout_ms: Number(values.vad_idle_timeout_ms) } : {}),
             },
-        input_audio_format: { type: values.input_audio_type, rate: values.input_audio_rate },
+        input_audio_format: values.input_audio_format,
+        output_audio_format: values.output_audio_format,
         transcription: {
           enabled: values.transcription_enabled,
           model: values.transcription_model,
@@ -368,7 +369,8 @@ export default function DashboardForm() {
         turn_detection: v.turn_detection === 'none'
           ? { type: 'none', threshold: 0.5, prefix_padding_ms: 0, silence_duration_ms: 0, create_response: true, interrupt_response: true }
           : { type: 'server_vad', threshold: v.vad_threshold, prefix_padding_ms: v.vad_prefix_padding_ms, silence_duration_ms: v.vad_silence_duration_ms, create_response: v.vad_create_response ?? true, interrupt_response: v.vad_interrupt_response ?? true, ...(v.vad_semantic ? { semantic: true } : {}), ...(v.vad_idle_timeout_ms ? { idle_timeout_ms: Number(v.vad_idle_timeout_ms) } : {}) },
-        input_audio_format: { type: v.input_audio_type, rate: v.input_audio_rate },
+        input_audio_format: v.input_audio_format,
+        output_audio_format: v.output_audio_format,
         transcription: { enabled: v.transcription_enabled, model: v.transcription_model, prompt: v.transcription_prompt, language: v.transcription_language, logprobs: v.transcription_logprobs, include_segments: v.transcription_segments },
         noise_reduction: v.noise_reduction,
         embedded_media: []
@@ -463,7 +465,8 @@ export default function DashboardForm() {
         turn_detection: v.turn_detection === 'none'
           ? { type: 'none', threshold: 0.5, prefix_padding_ms: 0, silence_duration_ms: 0, create_response: true, interrupt_response: true }
           : { type: 'server_vad', threshold: v.vad_threshold, prefix_padding_ms: v.vad_prefix_padding_ms, silence_duration_ms: v.vad_silence_duration_ms, create_response: true, interrupt_response: true },
-        input_audio_format: { type: v.input_audio_type, rate: v.input_audio_rate },
+        input_audio_format: v.input_audio_format,
+        output_audio_format: v.output_audio_format,
         transcription: { enabled: v.transcription_enabled, model: v.transcription_model, prompt: v.transcription_prompt, language: v.transcription_language, logprobs: v.transcription_logprobs, include_segments: v.transcription_segments },
         noise_reduction: v.noise_reduction,
         embedded_media: []
@@ -589,7 +592,30 @@ export default function DashboardForm() {
               {typeof form.watch('noise_reduction') === 'string' && !['near_field','far_field','none'].includes(form.watch('noise_reduction') as any) && (
                 <Input label="Custom noise reduction" value={form.watch('noise_reduction') as any} onChange={(e) => form.setValue('noise_reduction', e.target.value)} />
               )}
-              <Input label="Input Audio Rate" type="number" {...form.register('input_audio_rate', { valueAsNumber: true })} />
+              <Controller control={form.control} name="input_audio_format" render={({ field }) => (
+                <Select
+                  label="Input Audio Format"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={[
+                    { label: 'PCM16 (24kHz)', value: 'pcm16' },
+                    { label: 'G.711 μ-law (8kHz) - Telephony', value: 'g711_ulaw' },
+                    { label: 'G.711 A-law (8kHz)', value: 'g711_alaw' }
+                  ]}
+                />
+              )} />
+              <Controller control={form.control} name="output_audio_format" render={({ field }) => (
+                <Select
+                  label="Output Audio Format"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={[
+                    { label: 'PCM16 (24kHz)', value: 'pcm16' },
+                    { label: 'G.711 μ-law (8kHz) - Telephony', value: 'g711_ulaw' },
+                    { label: 'G.711 A-law (8kHz)', value: 'g711_alaw' }
+                  ]}
+                />
+              )} />
               <Controller control={form.control} name="transcription_enabled" render={({ field }) => (
                 <Toggle label="Transcription" checked={field.value} onChange={field.onChange} />
               )} />
@@ -758,7 +784,30 @@ export default function DashboardForm() {
           {typeof form.watch('noise_reduction') === 'string' && !['near_field','far_field','none'].includes(form.watch('noise_reduction') as any) && (
             <Input label="Custom noise reduction" value={form.watch('noise_reduction') as any} onChange={(e) => form.setValue('noise_reduction', e.target.value)} />
           )}
-          <Input label="Input Audio Rate" type="number" {...form.register('input_audio_rate', { valueAsNumber: true })} />
+          <Controller control={form.control} name="input_audio_format" render={({ field }) => (
+            <Select
+              label="Input Audio Format"
+              value={field.value}
+              onChange={field.onChange}
+              options={[
+                { label: 'PCM16 (24kHz)', value: 'pcm16' },
+                { label: 'G.711 μ-law (8kHz) - Telephony', value: 'g711_ulaw' },
+                { label: 'G.711 A-law (8kHz)', value: 'g711_alaw' }
+              ]}
+            />
+          )} />
+          <Controller control={form.control} name="output_audio_format" render={({ field }) => (
+            <Select
+              label="Output Audio Format"
+              value={field.value}
+              onChange={field.onChange}
+              options={[
+                { label: 'PCM16 (24kHz)', value: 'pcm16' },
+                { label: 'G.711 μ-law (8kHz) - Telephony', value: 'g711_ulaw' },
+                { label: 'G.711 A-law (8kHz)', value: 'g711_alaw' }
+              ]}
+            />
+          )} />
           <Controller control={form.control} name="transcription_enabled" render={({ field }) => (
             <Toggle label="Transcription" checked={field.value} onChange={field.onChange} />
           )} />
