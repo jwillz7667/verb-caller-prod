@@ -20,15 +20,9 @@ export async function POST(req: NextRequest) {
     const openaiKey = allowClientCredsServer() ? (data.openaiApiKey || process.env.OPENAI_API_KEY) : process.env.OPENAI_API_KEY
     if (!openaiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
 
-    // Create ephemeral client secret, ensuring server control webhook is set
+    // Create ephemeral client secret
     const base = resolveBaseUrl(req.url)
-    const controlUrl = process.env.REALTIME_CONTROL_URL || `${base}/api/realtime/control`
-    const controlSecret = process.env.REALTIME_CONTROL_SECRET || undefined
-    const ephPayload: any = {
-      ...data.ephemeral,
-      server: data.ephemeral.server || { url: controlUrl, ...(controlSecret ? { secret: controlSecret } : {}) }
-    }
-    const eph = await createEphemeralClientSecret(openaiKey, ephPayload)
+    const eph = await createEphemeralClientSecret(openaiKey, data.ephemeral)
     const secretVal = eph.client_secret.value
 
     // Create outbound call via Twilio

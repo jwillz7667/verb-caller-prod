@@ -65,10 +65,6 @@ export async function GET(req: NextRequest) {
       }
       if (instructions && instructions.trim().length > 0) payload.session.instructions = instructions
       if (promptId) payload.session.prompt = { id: promptId, ...(promptVersion ? { version: promptVersion } : {}) }
-      // Attach server control webhook for SIP sessions
-      const controlUrl = process.env.REALTIME_CONTROL_URL || `${base}/api/realtime/control`
-      const controlSecret = process.env.REALTIME_CONTROL_SECRET || undefined
-      payload.server = { url: controlUrl, ...(controlSecret ? { secret: controlSecret } : {}) }
       const token = await createEphemeralClientSecret(openaiKey, payload)
       secret = token?.client_secret?.value || ''
       if (!secret) {

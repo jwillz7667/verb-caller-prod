@@ -19,8 +19,6 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   const cleaned: any = {
     expires_after: body.expires_after,
     session: filteredSession,
-    // Pass optional server webhook details through for SIP control
-    ...(body.server && typeof body.server === 'object' ? { server: { url: body.server.url, ...(body.server.secret ? { secret: body.server.secret } : {}) } } : {}),
   }
   return cleaned
 }
