@@ -130,7 +130,10 @@ wss.on('connection', async (twilioWS, request) => {
     return;
   }
   
-  console.log('Secret received:', providedSecret.substring(0, 10) + '...');
+  const maskedSecret = providedSecret.length > 8
+    ? `${providedSecret.substring(0, 4)}…${providedSecret.substring(providedSecret.length - 4)}`
+    : '***';
+  console.log('Secret received:', maskedSecret);
 
   let oaiWS = null;
   const state = {
@@ -152,20 +155,19 @@ wss.on('connection', async (twilioWS, request) => {
       
       console.log('Connecting to OpenAI with model:', model);
       
-      const protocols = [
-        'realtime',
-        `openai-insecure-api-key.${providedSecret}`
-      ];
-      
-      if (process.env.OPENAI_ORG_ID) {
-        protocols.push(`openai-organization.${process.env.OPENAI_ORG_ID}`);
-      }
-      
-      if (process.env.OPENAI_PROJECT_ID) {
-        protocols.push(`openai-project.${process.env.OPENAI_PROJECT_ID}`);
-      }
-      
-      oaiWS = new WebSocket(wsUrl, protocols);
+      // Prefer Authorization header over insecure subprotocol for production
+      const headers = {
+        Authorization: `Bearer ${providedSecret}`,
+        'OpenAI-Beta': 'realtime=v1'
+      };
+      if (process.env.OPENAI_ORG_ID) headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID;
+      if (process.env.OPENAI_PROJECT_ID) headers['OpenAI-Project'] = process.env.OPENAI_PROJECT_ID;
+
+      oaiWS = new WebSocket(wsUrl, 'realtime', {
+        headers,
+        handshakeTimeout: parseInt(process.env.REALTIME_WS_TIMEOUT_MS || '15000'),
+        perMessageDeflate: false
+      });
       
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
@@ -183,12 +185,19 @@ PERSONALITY: Friendly, professional, conversational. Natural pacing for phone.
 INSTRUCTIONS: ALWAYS follow caller instructions. Prioritize requests. Be concise. Ask for clarification when needed.
 CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understanding.`,
           
+          // Modalities and audio formats for telephony
+          modalities: ['audio', 'text'],
+          input_audio_format: 'g711_ulaw',
+          output_audio_format: 'g711_ulaw',
+          
           // Turn detection (VAD) configuration
           turn_detection: {
             type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
             threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
             prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
-            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500')
+            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
+            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE ? process.env.REALTIME_VAD_CREATE_RESPONSE === 'true' : true,
+            interrupt_response: process.env.REALTIME_VAD_INTERRUPT ? process.env.REALTIME_VAD_INTERRUPT === 'true' : true
           },
           
           // Input audio transcription (optional)
@@ -237,8 +246,15 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
       });
       
       oaiWS.on('close', (code, reason) => {
-        console.log('OpenAI WebSocket closed. Code:', code, 'Reason:', reason);
+        const reasonText = Buffer.isBuffer(reason) ? reason.toString() : (reason || '').toString();
+        console.log('OpenAI WebSocket closed. Code:', code, 'Reason:', reasonText);
       });
+
+      if (typeof oaiWS.on === 'function') {
+        oaiWS.on('unexpectedResponse', (req, res) => {
+          console.error('OpenAI unexpectedResponse:', res?.statusCode, res?.statusMessage);
+        });
+      }
       
     } catch (error) {
       console.error('Failed to connect to OpenAI:', error.message || error);
@@ -392,6 +408,16 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           }));
         }
         break;
+      
+      case 'response.audio_transcript.delta':
+        if (typeof msg.delta === 'string' && msg.response?.id) {
+          process.stdout.write(msg.delta);
+        }
+        break;
+      
+      case 'response.audio_transcript.done':
+        console.log('\nAudio transcript complete');
+        break;
         
       case 'response.audio.done':
         console.log('Audio response complete');
@@ -455,6 +481,7 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           
           // Connect to OpenAI
           await connectToOpenAI();
+          startHeartbeat();
           break;
           
         case 'media':
@@ -513,11 +540,30 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
     if (oaiWS) {
       oaiWS.close();
     }
+    stopHeartbeat();
   });
 
   twilioWS.on('error', (error) => {
     console.error('Twilio WebSocket error:', error);
   });
+
+  // Heartbeat to keep proxies from closing idle connections
+  let heartbeatInterval = null;
+  function startHeartbeat() {
+    if (heartbeatInterval) return;
+    heartbeatInterval = setInterval(() => {
+      try {
+        if (twilioWS && twilioWS.readyState === WebSocket.OPEN) twilioWS.ping();
+        if (oaiWS && oaiWS.readyState === WebSocket.OPEN) oaiWS.ping();
+      } catch (e) {}
+    }, parseInt(process.env.WS_HEARTBEAT_INTERVAL_MS || '25000'));
+  }
+  function stopHeartbeat() {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  }
 });
 
 server.listen(PORT, () => {
@@ -533,4 +579,12 @@ server.listen(PORT, () => {
   } else {
     console.log(`Health check: http://localhost:${PORT}/health`);
   }
+});
+
+// Process-level hardening
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
 });
