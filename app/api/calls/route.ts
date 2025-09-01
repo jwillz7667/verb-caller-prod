@@ -5,6 +5,7 @@ import { createEphemeralClientSecret } from '@/lib/openai'
 import { getTwilioClient, getTwilioFromNumber } from '@/lib/twilio'
 import { resolveBaseUrl } from '@/lib/utils'
 import { allowClientCredsServer } from '@/lib/config'
+import { getRealtimeControlSettings } from '@/lib/realtimeControl'
 
 export const runtime = 'nodejs'
 
@@ -20,8 +21,30 @@ export async function POST(req: NextRequest) {
     const openaiKey = allowClientCredsServer() ? (data.openaiApiKey || process.env.OPENAI_API_KEY) : process.env.OPENAI_API_KEY
     if (!openaiKey) return Response.json({ error: 'OpenAI API key missing' }, { status: 400 })
 
-    // Create ephemeral client secret
-    const eph = await createEphemeralClientSecret(openaiKey, data.ephemeral)
+    // Get saved control settings
+    const customSettings = getRealtimeControlSettings()
+    
+    // Merge custom settings with the ephemeral request
+    // Priority: Custom settings from UI > Request body > Environment defaults
+    let ephemeralPayload = data.ephemeral
+    if (customSettings && ephemeralPayload?.session) {
+      ephemeralPayload.session = {
+        ...ephemeralPayload.session,
+        // Apply saved settings (these override the form values)
+        ...(customSettings.voice && { voice: customSettings.voice }),
+        ...(customSettings.instructions && { instructions: customSettings.instructions }),
+        ...(customSettings.temperature !== undefined && { temperature: customSettings.temperature }),
+        ...(customSettings.max_response_output_tokens !== undefined && { 
+          max_response_output_tokens: customSettings.max_response_output_tokens 
+        }),
+        ...(customSettings.turn_detection && { turn_detection: customSettings.turn_detection }),
+        ...(customSettings.tools && { tools: customSettings.tools }),
+        ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice }),
+      }
+    }
+
+    // Create ephemeral client secret with merged settings
+    const eph = await createEphemeralClientSecret(openaiKey, ephemeralPayload)
     const secretVal = eph.client_secret.value
 
     // Create outbound call via Twilio

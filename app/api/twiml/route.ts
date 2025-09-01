@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import twilio from 'twilio'
 import { createEphemeralClientSecret } from '@/lib/openai'
+import { getRealtimeControlSettings } from '@/lib/realtimeControl'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -50,16 +51,32 @@ export async function GET(req: NextRequest) {
       if (!openaiKey) {
         return new Response('<Response><Say>Server not configured.</Say></Response>', { status: 500, headers: { 'Content-Type': 'text/xml' } })
       }
+      // Get custom settings from UI if available
+      const customSettings = getRealtimeControlSettings()
+      
+      // Use custom settings if available, otherwise fall back to env/query params
       const model = (searchParams.get('model') || process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
       const promptId = searchParams.get('prompt_id') || undefined
       const promptVersion = searchParams.get('prompt_version') || undefined
-      // Limit instructions length to prevent abuse (max 1000 chars)
+      
+      // Build session config from custom settings or defaults
       const instructionsParam = searchParams.get('instructions')
-      const instructions = instructionsParam?.slice(0, 1000) || process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
+      const instructions = customSettings?.instructions || 
+                          instructionsParam?.slice(0, 1000) || 
+                          process.env.REALTIME_DEFAULT_INSTRUCTIONS || 
+                          'You are a helpful assistant. Be concise and natural in your responses.'
+      
       const expiresSeconds = parseInt(process.env.REALTIME_EXPIRES_SECONDS || '600', 10)
       const payload: any = {
         expires_after: { anchor: 'created_at', seconds: Number.isFinite(expiresSeconds) ? expiresSeconds : 600 },
-        session: { type: 'realtime', model }
+        session: { 
+          type: 'realtime', 
+          model,
+          // Apply custom settings if available
+          ...(customSettings?.voice && { voice: customSettings.voice }),
+          ...(customSettings?.temperature && { temperature: customSettings.temperature }),
+          ...(customSettings?.max_response_output_tokens && { max_response_output_tokens: customSettings.max_response_output_tokens }),
+        }
       }
       if (instructions && instructions.trim().length > 0) payload.session.instructions = instructions
       if (promptId) payload.session.prompt = { id: promptId, ...(promptVersion ? { version: promptVersion } : {}) }

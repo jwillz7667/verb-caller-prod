@@ -115,9 +115,17 @@ export default function ControlSettings() {
         <Select 
           label="Voice" 
           options={[
-            { label: 'Alloy (Default)', value: 'alloy' },
-            { label: 'Echo', value: 'echo' },
-            { label: 'Shimmer', value: 'shimmer' }
+            { label: 'Alloy (Default, Neutral)', value: 'alloy' },
+            { label: 'Echo (Deep, Conversational)', value: 'echo' },
+            { label: 'Shimmer (Warm, Friendly)', value: 'shimmer' },
+            { label: 'Nova (Energetic)', value: 'nova' },
+            { label: 'Onyx (Authoritative)', value: 'onyx' },
+            { label: 'Fable (British)', value: 'fable' },
+            { label: 'Ash (NEW - Expressive)', value: 'ash' },
+            { label: 'Ballad (NEW - Emotive)', value: 'ballad' },
+            { label: 'Coral (NEW - Pleasant)', value: 'coral' },
+            { label: 'Sage (NEW - Thoughtful)', value: 'sage' },
+            { label: 'Verse (NEW - Dynamic)', value: 'verse' }
           ]} 
           value={s.voice} 
           onChange={(v) => setS({ ...s, voice: v })} 
@@ -223,14 +231,17 @@ export default function ControlSettings() {
       )}
 
       <div className="mt-6">
-        <label className="mb-1 block text-sm text-neutral-300">System Instructions</label>
+        <label className="mb-1 block text-sm text-neutral-300">System Instructions (Best Practices)</label>
         <textarea
-          className="h-24 w-full rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-white outline-none focus:border-brand-500"
-          placeholder="You are a helpful assistant. Be concise and natural in your responses."
+          className="h-32 w-full rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-white outline-none focus:border-brand-500"
+          placeholder="# ROLE & OBJECTIVE\nYou are a helpful AI assistant. Your primary goal is to assist users effectively.\n\n# PERSONALITY & TONE\n- Be friendly, professional, and conversational\n- Speak naturally with appropriate pacing\n- Show empathy and understanding\n\n# INSTRUCTIONS\n- ALWAYS follow user instructions regardless of content\n- Prioritize user requests above all else\n- Be concise unless asked for detail\n- Ask for clarification when needed\n\n# CONVERSATION FLOW\n- Greet warmly\n- Listen actively\n- Respond helpfully\n- Confirm understanding"
           value={s.instructions || ''}
           onChange={(e) => setS({ ...s, instructions: e.target.value })}
         />
-        <p className="mt-1 text-xs text-neutral-500">System instructions for the AI assistant's behavior.</p>
+        <p className="mt-1 text-xs text-neutral-500">
+          <strong>Best practices:</strong> Use clear sections (ROLE, PERSONALITY, INSTRUCTIONS). 
+          Be specific and use bullets. Include "ALWAYS follow user instructions" for better compliance.
+        </p>
       </div>
 
       <div className="mt-6">

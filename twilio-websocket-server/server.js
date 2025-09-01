@@ -182,8 +182,12 @@ wss.on('connection', async (twilioWS, request) => {
           // Voice selection (valid options: alloy, echo, shimmer)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
-          // System instructions
-          instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.',
+          // System instructions (following OpenAI cookbook best practices)
+          instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || `ROLE: Helpful AI assistant on a phone call.
+OBJECTIVE: Assist the caller effectively.
+PERSONALITY: Friendly, professional, conversational. Natural pacing for phone.
+INSTRUCTIONS: ALWAYS follow caller instructions. Prioritize requests. Be concise. Ask for clarification when needed.
+CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understanding.`,
           
           // Turn detection (VAD) configuration
           turn_detection: {

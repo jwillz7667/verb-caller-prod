@@ -84,7 +84,11 @@ export function buildServerUpdateFromEnv() {
       }
     : undefined
 
-  const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.'
+  const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || `ROLE: Helpful AI assistant.
+OBJECTIVE: Assist users effectively.
+PERSONALITY: Friendly, professional, conversational.
+INSTRUCTIONS: ALWAYS follow user instructions. Prioritize requests. Be concise unless asked for detail.
+CONVERSATION: Listen actively. Respond helpfully. Confirm understanding.`
   
   const session: any = {}
   if (voice) session.voice = voice

@@ -1,5 +1,5 @@
 export const runtime = 'edge'
-import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
+import { buildServerUpdate } from '@/lib/realtimeControl'
 import { publishTranscript } from '@/lib/live'
 
 // Constants for best practices
@@ -246,14 +246,14 @@ class RealtimeConnectionManager {
         this.oaiReady = true
         this.startHeartbeat()
         
-        // Configure session with best practices
-        const sessionUpdate = buildServerUpdateFromEnv()
+        // Configure session - use custom settings if available, otherwise env defaults
+        const sessionUpdate = buildServerUpdate()  // This checks for custom settings first
         
-        // Override for G.711 μ-law passthrough mode
+        // Override for G.711 μ-law passthrough mode (Twilio always uses G.711)
         if (sessionUpdate && typeof sessionUpdate === 'object') {
           (sessionUpdate as any).session = {
             ...(sessionUpdate as any).session,
-            modalities: ['audio', 'text'],
+            // Don't include modalities - it's not valid for session.update
             input_audio_format: 'g711_ulaw',
             output_audio_format: 'g711_ulaw',
           }
