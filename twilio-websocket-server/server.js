@@ -117,7 +117,9 @@ wss.on('connection', async (twilioWS, request) => {
     callSid: '',
     lastAssistantItem: null,
     responseStartTimestamp: null,
-    latestMediaTimestamp: null
+    latestMediaTimestamp: null,
+    isResponseActive: false,  // Track if response is currently active
+    hasInterrupted: false     // Prevent multiple interruption attempts
   };
 
   // Connect to OpenAI
@@ -147,29 +149,29 @@ wss.on('connection', async (twilioWS, request) => {
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
         
-        // Configure session for G.711 μ-law with full OpenAI Realtime API compliance
+        // Configure session for G.711 μ-law with OpenAI Realtime API
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            type: 'realtime',  // Required: session type
-            model: model,  // Specify model explicitly
-            modalities: ['audio', 'text'],  // Can also include 'image' for gpt-realtime
+            // Note: 'type' and 'modalities' are NOT valid session parameters
+            // They are only used when creating ephemeral tokens, not in session.update
+            
+            // Audio format configuration
             input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
             output_audio_format: 'g711_ulaw',  // Match Twilio format
             
-            // Voice options (2025): alloy, echo, shimmer, nova, sage (new voices added Oct 2024)
+            // Voice options: alloy, echo, shimmer, nova, sage
             voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
             
             // Instructions for the assistant
             instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.',
             
-            // Turn detection configuration (server_vad, semantic_vad, or none)
+            // Turn detection configuration
             turn_detection: {
-              type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or semantic_vad
+              type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
               threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
               prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
               silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
-              create_response: true,  // Auto-generate response after turn
             },
             
             // Optional: Enable input audio transcription
@@ -261,27 +263,29 @@ wss.on('connection', async (twilioWS, request) => {
         
       case 'input_audio_buffer.speech_started':
         console.log('Speech started - handling barge-in');
-        // Handle barge-in
+        // Clear Twilio's audio queue
         twilioWS.send(JSON.stringify({
           event: 'clear',
           streamSid: state.streamSid
         }));
         
-        // Cancel current response if assistant is speaking
-        if (state.lastAssistantItem && state.responseStartTimestamp !== null) {
-          const audioEndMs = Math.max(0, (state.latestMediaTimestamp || 0) - state.responseStartTimestamp);
+        // Only truncate if there's an active response and we haven't already interrupted
+        if (state.isResponseActive && state.lastAssistantItem && !state.hasInterrupted) {
+          const audioEndMs = state.responseStartTimestamp !== null 
+            ? Math.max(0, (state.latestMediaTimestamp || 0) - state.responseStartTimestamp)
+            : 0;
+          
           if (oaiWS && oaiWS.readyState === WebSocket.OPEN) {
+            console.log('Truncating assistant response at', audioEndMs, 'ms');
             oaiWS.send(JSON.stringify({
               type: 'conversation.item.truncate',
               item_id: state.lastAssistantItem,
               content_index: 0,
               audio_end_ms: audioEndMs
             }));
+            state.hasInterrupted = true;
           }
         }
-        
-        state.lastAssistantItem = null;
-        state.responseStartTimestamp = null;
         break;
         
       case 'input_audio_buffer.speech_stopped':
@@ -291,6 +295,8 @@ wss.on('connection', async (twilioWS, request) => {
       // Response events
       case 'response.created':
         console.log('Response created:', msg.response?.id);
+        state.isResponseActive = true;
+        state.hasInterrupted = false;
         break;
         
       case 'response.output_item.added':
@@ -347,15 +353,18 @@ wss.on('connection', async (twilioWS, request) => {
         
       case 'response.audio.done':
         console.log('Audio response complete');
-        state.responseStartTimestamp = null;
         break;
         
       case 'response.done':
         console.log('Full response complete');
+        state.isResponseActive = false;
+        state.lastAssistantItem = null;
+        state.responseStartTimestamp = null;
         break;
         
       case 'response.cancelled':
         console.log('Response cancelled');
+        state.isResponseActive = false;
         state.lastAssistantItem = null;
         state.responseStartTimestamp = null;
         break;
