@@ -242,6 +242,7 @@ export default function DashboardForm() {
   const removeMcp = (idx: number) => setMcpServers((t) => t.filter((_, i) => i !== idx))
 
   const onSubmit = form.handleSubmit(async (values) => {
+    console.log('Form submitted with values:', values)
     try {
       const embedded_media = [] as RealtimeSession['embedded_media']
       const files: FileList | null = values.imageFiles as any
@@ -290,28 +291,35 @@ export default function DashboardForm() {
         embedded_media,
       }
 
+      const payload = {
+        toNumber: values.toNumber,
+        record: values.record,
+        ephemeral: {
+          expires_after: { anchor: 'created_at', seconds: values.expiresSeconds },
+          session,
+        }
+      }
+      
+      console.log('Sending call request:', payload)
+      
       const res = await fetch('/api/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          toNumber: values.toNumber,
-          record: values.record,
-          ephemeral: {
-            expires_after: { anchor: 'created_at', seconds: values.expiresSeconds },
-            session,
-          }
-        })
+        body: JSON.stringify(payload)
       })
+
+      console.log('Response status:', res.status)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+        console.error('API error response:', err)
         const msg = err?.error?.message || err?.error || err?.message || `Failed: ${res.status}`
         throw new Error(msg)
       }
       const json = await res.json()
       const callSid: string | undefined = json?.callSid
-      toast.success('Call initiated')
-      console.log('Call created:', json)
+      toast.success(`Call initiated! SID: ${callSid}`)
+      console.log('Call created successfully:', json)
       if (callSid) {
         setCurrentCallSid(callSid)
         // close previous
@@ -330,14 +338,15 @@ export default function DashboardForm() {
             setTranscript((prev) => [...prev, data])
           } catch {}
         })
-        es.onerror = () => {
+        es.onerror = (error) => {
+          console.error('SSE error:', error)
           // keep UI soft-failing; user can restart
         }
         sseRef.current = es
       }
     } catch (e: any) {
       toast.error(e?.message || 'Failed to start call')
-      console.error(e)
+      console.error('Call submission error:', e)
     }
   })
 

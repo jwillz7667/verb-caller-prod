@@ -16,11 +16,10 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
     if (typeof v === 'number') filteredSession.prompt.version = String(v)
   }
   // Only keep top-level fields allowed by the endpoint
+  // NOTE: OpenAI's ephemeral token endpoint does NOT accept 'server' parameter
   const cleaned: any = {
     expires_after: body.expires_after,
     session: filteredSession,
-    // Pass optional server webhook details through for SIP control
-    ...(body.server && typeof body.server === 'object' ? { server: { url: body.server.url, ...(body.server.secret ? { secret: body.server.secret } : {}) } } : {}),
   }
   return cleaned
 }
