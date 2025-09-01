@@ -115,14 +115,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Compose target URI with proper escaping
-  let sipUri: string
-  if (scheme === 'sips') {
-    // TLS implied; Twilio defaults to 5061 if port omitted
-    sipUri = `sips:${secret}@${sipDomain}${port ? `:${port}` : ''}`
-  } else {
-    // Default to SIP over TLS via transport param
-    sipUri = `sip:${secret}@${sipDomain}${port ? `:${port}` : ''};transport=${transport}`
-  }
+  // Force SIPS with explicit port 5061 to avoid DNS SRV ambiguity
+  const enforcedPort = '5061'
+  const sipUri = `sips:${secret}@${sipDomain}:${enforcedPort}`
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${escapeXml(sipUri)}</Sip>\n  </Dial>\n</Response>`
   return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
 }
