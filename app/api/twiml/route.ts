@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
   // Validate mode parameter
   const modeParam = searchParams.get('mode')?.toLowerCase()
   const defaultMode = process.env.TWIML_DEFAULT_MODE?.toLowerCase()
-  const mode = (modeParam === 'stream' || modeParam === 'sip') ? modeParam : 
-               (defaultMode === 'stream' || defaultMode === 'sip') ? defaultMode : 'sip'
+  const mode = (modeParam === 'stream' || modeParam === 'sip' || modeParam === 'simple') ? modeParam : 
+               (defaultMode === 'stream' || defaultMode === 'sip' || defaultMode === 'simple') ? defaultMode : 'sip'
   // If no secret is provided, mint one on the fly (automatic flow)
   if (!secret) {
     try {
