@@ -7,6 +7,7 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
   
   // Allow all valid session parameters for ephemeral token creation
   // Based on OpenAI Realtime API documentation
+  // Note: temperature and max_response_output_tokens are not supported in ephemeral token creation
   const allowedSession = new Set([
     'type',
     'model', 
@@ -19,9 +20,7 @@ function sanitizeEphemeralPayload(payload: EphemeralRequest) {
     'input_audio_transcription',
     'turn_detection',
     'tools',
-    'tool_choice',
-    'temperature',
-    'max_response_output_tokens'
+    'tool_choice'
   ])
   
   const s = body.session || {}

@@ -41,10 +41,8 @@ export async function POST(req: NextRequest) {
           // Apply saved settings (these override the form values)
           ...(customSettings.voice && { voice: customSettings.voice }),
           ...(customSettings.instructions && { instructions: customSettings.instructions }),
-          ...(customSettings.temperature !== undefined && { temperature: customSettings.temperature }),
-          ...(customSettings.max_response_output_tokens !== undefined && { 
-            max_response_output_tokens: customSettings.max_response_output_tokens 
-          }),
+          // Note: temperature and max_response_output_tokens are not supported in ephemeral token creation
+          // These parameters can only be set via server-side session.update after connection
           ...(customSettings.turn_detection && { turn_detection: customSettings.turn_detection }),
           ...(customSettings.tools && { tools: customSettings.tools }),
           ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice as any }),
