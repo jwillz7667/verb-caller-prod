@@ -250,10 +250,10 @@ class RealtimeConnectionManager {
         const sessionUpdate = buildServerUpdate()  // This checks for custom settings first
         
         // Override for G.711 μ-law passthrough mode (Twilio always uses G.711)
-        if (sessionUpdate && typeof sessionUpdate === 'object') {
+        if (sessionUpdate && typeof sessionUpdate === 'object' && (sessionUpdate as any).session) {
+          // Merge the audio formats without losing other properties
           (sessionUpdate as any).session = {
             ...(sessionUpdate as any).session,
-            // Don't include modalities - it's not valid for session.update
             input_audio_format: 'g711_ulaw',
             output_audio_format: 'g711_ulaw',
           }

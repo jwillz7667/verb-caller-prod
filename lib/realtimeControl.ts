@@ -131,6 +131,11 @@ export function buildServerUpdate() {
   if (s.output_audio_format) session.output_audio_format = s.output_audio_format
   if (s.input_audio_transcription) session.input_audio_transcription = s.input_audio_transcription
   
+  // If no settings were applied, fall back to env defaults
+  if (Object.keys(session).length === 0) {
+    return buildServerUpdateFromEnv()
+  }
+  
   return { type: 'session.update', session }
 }
 
