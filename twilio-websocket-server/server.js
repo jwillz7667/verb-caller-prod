@@ -74,14 +74,39 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', async (twilioWS, request) => {
   console.log('New Twilio WebSocket connection from:', request.headers['x-forwarded-for'] || request.socket.remoteAddress);
-  console.log('URL:', request.url);
+  console.log('Full URL:', request.url);
+  console.log('Headers:', JSON.stringify(request.headers, null, 2));
   
   // Parse query parameters to get the secret
-  const queryParams = url.parse(request.url || '', true).query;
-  const providedSecret = queryParams.secret;
+  const fullUrl = request.url || '';
+  console.log('Parsing URL:', fullUrl);
+  
+  // Try multiple ways to get the secret
+  let providedSecret = null;
+  
+  // Method 1: Direct query parameter
+  if (fullUrl.includes('?')) {
+    const queryString = fullUrl.split('?')[1];
+    const params = new URLSearchParams(queryString);
+    providedSecret = params.get('secret');
+    console.log('Method 1 - Query param secret:', providedSecret ? 'Found' : 'Not found');
+  }
+  
+  // Method 2: Parse with url module
+  if (!providedSecret) {
+    const queryParams = url.parse(fullUrl, true).query;
+    providedSecret = queryParams.secret;
+    console.log('Method 2 - URL parse secret:', providedSecret ? 'Found' : 'Not found');
+  }
+  
+  // Method 3: Check custom header (backup)
+  if (!providedSecret) {
+    providedSecret = request.headers['x-openai-secret'];
+    console.log('Method 3 - Header secret:', providedSecret ? 'Found' : 'Not found');
+  }
   
   if (!providedSecret) {
-    console.error('No secret provided in WebSocket URL');
+    console.error('No secret provided. URL was:', fullUrl);
     twilioWS.close(1008, 'Secret required');
     return;
   }
