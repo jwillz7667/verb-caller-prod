@@ -152,6 +152,8 @@ wss.on('connection', async (twilioWS, request) => {
         // Configure session according to OpenAI Realtime API documentation
         // Valid parameters for session.update (confirmed from API docs):
         const sessionConfig = {
+          type: 'realtime',  // Required by OpenAI even though not in docs
+          
           // Audio configuration
           input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
           output_audio_format: 'g711_ulaw',  // Match Twilio format
