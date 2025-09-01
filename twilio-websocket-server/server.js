@@ -171,11 +171,9 @@ wss.on('connection', async (twilioWS, request) => {
         console.log('Connected to OpenAI');
         
         // Configure session according to OpenAI Realtime API documentation
-        // Valid parameters for session.update (confirmed from API docs):
+        // Note: modalities is set in token creation, not session.update
         const sessionConfig = {
-          type: 'realtime',  // Required by OpenAI even though not in docs
-          
-          // Audio configuration
+          // Audio configuration - use string literals
           input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
           output_audio_format: 'g711_ulaw',  // Match Twilio format
           
@@ -214,10 +212,11 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096
         };
         
-        // Remove null/undefined values to avoid API errors
+        // Remove null/undefined values and 'type' field to avoid API errors
         const cleanSession = {};
         for (const [key, value] of Object.entries(sessionConfig)) {
-          if (value !== null && value !== undefined) {
+          // Skip 'type' as it's not valid for session.update
+          if (key !== 'type' && value !== null && value !== undefined) {
             cleanSession[key] = value;
           }
         }
