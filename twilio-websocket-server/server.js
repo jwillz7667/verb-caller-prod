@@ -123,6 +123,7 @@ wss.on('connection', async (twilioWS, request) => {
   // Connect to OpenAI
   async function connectToOpenAI() {
     try {
+      // Use latest gpt-realtime model (2025 version)
       const model = process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime';
       const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
       
@@ -146,24 +147,47 @@ wss.on('connection', async (twilioWS, request) => {
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
         
-        // Configure session for G.711 μ-law
+        // Configure session for G.711 μ-law with full OpenAI Realtime API compliance
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            type: 'realtime',  // Add required session type
-            modalities: ['audio', 'text'],
-            input_audio_format: 'g711_ulaw',
-            output_audio_format: 'g711_ulaw',
+            type: 'realtime',  // Required: session type
+            model: model,  // Specify model explicitly
+            modalities: ['audio', 'text'],  // Can also include 'image' for gpt-realtime
+            input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
+            output_audio_format: 'g711_ulaw',  // Match Twilio format
+            
+            // Voice options (2025): alloy, echo, shimmer, nova, sage (new voices added Oct 2024)
             voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
-            instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant.',
+            
+            // Instructions for the assistant
+            instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || 'You are a helpful assistant. Be concise and natural in your responses.',
+            
+            // Turn detection configuration (server_vad, semantic_vad, or none)
             turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 200,
-              create_response: true,
-              interrupt_response: true
-            }
+              type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or semantic_vad
+              threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
+              prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
+              silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
+              create_response: true,  // Auto-generate response after turn
+            },
+            
+            // Optional: Enable input audio transcription
+            input_audio_transcription: process.env.REALTIME_TRANSCRIBE_INPUT === 'true' ? {
+              model: 'whisper-1'
+            } : null,
+            
+            // Optional: Tools configuration (for function calling)
+            tools: [],  // Add tools here if needed
+            
+            // Optional: Tool choice
+            tool_choice: 'auto',  // auto, none, required, or specific function
+            
+            // Temperature for response generation
+            temperature: parseFloat(process.env.REALTIME_TEMPERATURE || '0.8'),
+            
+            // Max response output tokens (text + audio)
+            max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096')
           }
         };
         
@@ -195,9 +219,107 @@ wss.on('connection', async (twilioWS, request) => {
     }
   }
 
-  // Handle OpenAI messages
+  // Handle OpenAI messages (all event types)
   function handleOpenAIMessage(msg) {
     switch (msg.type) {
+      // Session events
+      case 'session.created':
+        console.log('Session created:', msg.session?.id);
+        break;
+        
+      case 'session.updated':
+        console.log('Session updated');
+        break;
+        
+      // Conversation events
+      case 'conversation.created':
+        console.log('Conversation created:', msg.conversation?.id);
+        break;
+        
+      case 'conversation.item.created':
+        if (msg.item?.type === 'message' && msg.item?.role === 'assistant') {
+          console.log('Assistant message created:', msg.item?.id);
+        }
+        break;
+        
+      case 'conversation.item.deleted':
+        console.log('Conversation item deleted:', msg.item_id);
+        break;
+        
+      case 'conversation.item.truncated':
+        console.log('Conversation item truncated:', msg.item_id);
+        break;
+        
+      // Input audio buffer events
+      case 'input_audio_buffer.committed':
+        console.log('Input audio committed');
+        break;
+        
+      case 'input_audio_buffer.cleared':
+        console.log('Input audio buffer cleared');
+        break;
+        
+      case 'input_audio_buffer.speech_started':
+        console.log('Speech started - handling barge-in');
+        // Handle barge-in
+        twilioWS.send(JSON.stringify({
+          event: 'clear',
+          streamSid: state.streamSid
+        }));
+        
+        // Cancel current response if assistant is speaking
+        if (state.lastAssistantItem && state.responseStartTimestamp !== null) {
+          const audioEndMs = Math.max(0, (state.latestMediaTimestamp || 0) - state.responseStartTimestamp);
+          if (oaiWS && oaiWS.readyState === WebSocket.OPEN) {
+            oaiWS.send(JSON.stringify({
+              type: 'conversation.item.truncate',
+              item_id: state.lastAssistantItem,
+              content_index: 0,
+              audio_end_ms: audioEndMs
+            }));
+          }
+        }
+        
+        state.lastAssistantItem = null;
+        state.responseStartTimestamp = null;
+        break;
+        
+      case 'input_audio_buffer.speech_stopped':
+        console.log('Speech stopped');
+        break;
+        
+      // Response events
+      case 'response.created':
+        console.log('Response created:', msg.response?.id);
+        break;
+        
+      case 'response.output_item.added':
+        console.log('Output item added:', msg.item?.id);
+        break;
+        
+      case 'response.output_item.done':
+        console.log('Output item done:', msg.item?.id);
+        break;
+        
+      case 'response.content_part.added':
+        console.log('Content part added');
+        break;
+        
+      case 'response.content_part.done':
+        console.log('Content part done');
+        break;
+        
+      case 'response.text.delta':
+        // Text response chunk (if modality includes text)
+        if (msg.delta) {
+          process.stdout.write(msg.delta);
+        }
+        break;
+        
+      case 'response.text.done':
+        console.log('\nText response complete');
+        break;
+        
       case 'response.audio.delta':
         // Forward audio to Twilio
         if (msg.delta && twilioWS.readyState === WebSocket.OPEN) {
@@ -223,28 +345,44 @@ wss.on('connection', async (twilioWS, request) => {
         }
         break;
         
-      case 'input_audio_buffer.speech_started':
-        // Handle barge-in
-        twilioWS.send(JSON.stringify({
-          event: 'clear',
-          streamSid: state.streamSid
-        }));
+      case 'response.audio.done':
+        console.log('Audio response complete');
+        state.responseStartTimestamp = null;
+        break;
         
-        // Truncate assistant response if speaking
-        if (state.lastAssistantItem && state.responseStartTimestamp !== null && state.latestMediaTimestamp !== null) {
-          const audioEndMs = Math.max(0, state.latestMediaTimestamp - state.responseStartTimestamp);
-          if (oaiWS && oaiWS.readyState === WebSocket.OPEN) {
-            oaiWS.send(JSON.stringify({
-              type: 'conversation.item.truncate',
-              item_id: state.lastAssistantItem,
-              content_index: 0,
-              audio_end_ms: audioEndMs
-            }));
-          }
-        }
+      case 'response.done':
+        console.log('Full response complete');
+        break;
         
+      case 'response.cancelled':
+        console.log('Response cancelled');
         state.lastAssistantItem = null;
         state.responseStartTimestamp = null;
+        break;
+        
+      case 'response.function_call_arguments.delta':
+        // Function call arguments chunk
+        if (msg.delta) {
+          console.log('Function call args:', msg.delta);
+        }
+        break;
+        
+      case 'response.function_call_arguments.done':
+        console.log('Function call complete:', msg.name);
+        break;
+        
+      // Transcription events
+      case 'conversation.item.input_audio_transcription.completed':
+        console.log('User transcription:', msg.transcript);
+        break;
+        
+      case 'conversation.item.input_audio_transcription.failed':
+        console.error('Transcription failed:', msg.error);
+        break;
+        
+      // Rate limit events
+      case 'rate_limits.updated':
+        console.log('Rate limits:', msg.rate_limits);
         break;
         
       case 'error':
@@ -273,11 +411,11 @@ wss.on('connection', async (twilioWS, request) => {
           if (msg.media?.payload && oaiWS && oaiWS.readyState === WebSocket.OPEN) {
             state.latestMediaTimestamp = msg.media.timestamp || state.latestMediaTimestamp;
             
-            // Don't cancel on every packet - let VAD handle interruptions
-            // Only send audio
+            // Append audio to input buffer
+            // OpenAI will handle VAD and turn detection based on session config
             oaiWS.send(JSON.stringify({
               type: 'input_audio_buffer.append',
-              audio: msg.media.payload
+              audio: msg.media.payload  // Base64 encoded G.711 μ-law audio
             }));
           }
           break;
@@ -285,9 +423,22 @@ wss.on('connection', async (twilioWS, request) => {
         case 'mark':
           // Handle custom marks for turn management
           if (msg.mark?.name === 'commit' && oaiWS && oaiWS.readyState === WebSocket.OPEN) {
+            // Manually commit audio buffer and create response
             oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-            oaiWS.send(JSON.stringify({ type: 'response.create' }));
-            console.log('Manual turn commit');
+            oaiWS.send(JSON.stringify({ 
+              type: 'response.create',
+              response: {
+                modalities: ['audio', 'text'],
+                instructions: null,  // Use session instructions
+                voice: null,  // Use session voice
+                output_audio_format: 'g711_ulaw',
+                tools: [],
+                tool_choice: 'auto',
+                temperature: null,  // Use session temperature
+                max_output_tokens: null  // Use session max tokens
+              }
+            }));
+            console.log('Manual turn commit with response creation');
           }
           break;
           
