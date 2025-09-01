@@ -255,6 +255,8 @@ export default function DashboardForm() {
       }
 
       const allTools = [...tools, ...mcpServers]
+      // Note: temperature and max_output_tokens are not supported in ephemeral token creation
+      // They can only be set via server-side session.update after connection
       const session: RealtimeSession = {
         type: 'realtime',
         model: values.model,
@@ -262,8 +264,8 @@ export default function DashboardForm() {
         ...(values.promptId && values.promptId.trim().length > 0 ? { prompt: { id: values.promptId, ...(values.promptVersion && values.promptVersion.trim().length > 0 ? { version: values.promptVersion } : {}) } } : {}),
         tools: allTools as any,
         tool_choice: values.tool_choice,
-        temperature: values.temperature,
-        max_output_tokens: values.max_output_tokens === 'inf' ? 'inf' : Number(values.max_output_tokens),
+        // temperature: values.temperature, // Not supported in ephemeral tokens
+        // max_output_tokens: values.max_output_tokens === 'inf' ? 'inf' : Number(values.max_output_tokens), // Not supported
         modalities: values.modalities as any,
         voice: values.voice,
         turn_detection: values.turn_detection === 'none'
@@ -367,8 +369,8 @@ export default function DashboardForm() {
         ...(v.promptId && v.promptId.trim().length > 0 ? { prompt: { id: v.promptId, ...(v.promptVersion && v.promptVersion.trim().length > 0 ? { version: v.promptVersion } : {}) } } : {}),
         tools: allTools as any,
         tool_choice: v.tool_choice,
-        temperature: v.temperature,
-        max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens),
+        // temperature: v.temperature, // Not supported in ephemeral tokens
+        // max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens), // Not supported
         modalities: v.modalities as any,
         voice: v.voice,
         turn_detection: v.turn_detection === 'none'
@@ -470,8 +472,8 @@ export default function DashboardForm() {
         ...(v.promptId && v.promptId.trim().length > 0 ? { prompt: { id: v.promptId, ...(v.promptVersion && v.promptVersion.trim().length > 0 ? { version: v.promptVersion } : {}) } } : {}),
         tools,
         tool_choice: v.tool_choice,
-        temperature: v.temperature,
-        max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens),
+        // temperature: v.temperature, // Not supported in ephemeral tokens
+        // max_output_tokens: v.max_output_tokens === 'inf' ? 'inf' : Number(v.max_output_tokens), // Not supported
         modalities: v.modalities as any,
         voice: v.voice,
         turn_detection: v.turn_detection === 'none'

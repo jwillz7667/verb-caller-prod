@@ -25,8 +25,10 @@ const RealtimeSessionCore = z.object({
   }).optional(),
   tools: z.array(ToolSchema).optional().default([]),
   tool_choice: z.union([z.enum(['auto', 'required', 'none']), z.string()]).default('auto'),
-  temperature: z.number().min(0).max(2).default(0.7),
-  max_output_tokens: z.union([z.literal('inf'), z.number().int().min(1)]).default('inf'),
+  // Note: temperature and max_output_tokens are not supported in ephemeral token creation
+  // They can only be set via server-side session.update after connection
+  temperature: z.number().min(0).max(2).default(0.7).optional(),
+  max_output_tokens: z.union([z.literal('inf'), z.number().int().min(1)]).default('inf').optional(),
   max_response_output_tokens: z.union([z.literal('inf'), z.number().int().min(1), z.null()]).optional(),
   modalities: z.array(z.enum(['audio', 'text'])).default(['audio']),
   voice: z.string().default('alloy'),
