@@ -2,371 +2,582 @@ export const runtime = 'edge'
 import { buildServerUpdateFromEnv } from '@/lib/realtimeControl'
 import { publishTranscript } from '@/lib/live'
 
-// Basic u-law (G.711) <-> PCM16 conversions
-function muLawDecode(u8: Uint8Array): Int16Array {
-  const out = new Int16Array(u8.length)
-  for (let i = 0; i < u8.length; i++) {
-    const u = u8[i]
-    let x = ~u
-    let sign = (x & 0x80) ? -1 : 1
-    let exponent = (x >> 4) & 0x07
-    let mantissa = x & 0x0f
-    let magnitude = ((mantissa << 4) + 0x08) << (exponent + 2)
-    out[i] = (sign * magnitude) as number
-  }
-  return out
-}
+// Constants for best practices
+const TWILIO_FRAME_SIZE = 160 // 20ms of 8kHz audio
+const FRAME_DURATION_MS = 20
+const MAX_PENDING_FRAMES = 100 // Prevent memory bloat
+const CONNECTION_TIMEOUT_MS = 30000
+const HEARTBEAT_INTERVAL_MS = 10000
 
-function muLawEncode(pcm: Int16Array): Uint8Array {
-  const out = new Uint8Array(pcm.length)
-  for (let i = 0; i < pcm.length; i++) {
-    let sample = pcm[i]
-    let sign = (sample >> 8) & 0x80
-    if (sign !== 0) sample = -sample
-    if (sample > 32635) sample = 32635
-    sample = sample + 132
-    let exponent = 7
-    for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {}
-    let mantissa = (sample >> (exponent + 3)) & 0x0f
-    let mu = ~(sign | (exponent << 4) | mantissa)
-    out[i] = mu & 0xff
-  }
-  return out
-}
-
-// Naive linear resampler PCM16 from srcRate to dstRate
-function resamplePCM16(pcm: Int16Array, srcRate: number, dstRate: number): Int16Array {
-  if (srcRate === dstRate) return pcm
-  const ratio = dstRate / srcRate
-  const outLen = Math.floor(pcm.length * ratio)
-  const out = new Int16Array(outLen)
-  for (let i = 0; i < outLen; i++) {
-    const idx = i / ratio
-    const idx0 = Math.floor(idx)
-    const idx1 = Math.min(idx0 + 1, pcm.length - 1)
-    const frac = idx - idx0
-    out[i] = (pcm[idx0] * (1 - frac) + pcm[idx1] * frac) | 0
-  }
-  return out
-}
-
-function base64ToUint8(b64: string): Uint8Array {
-  const bin = atob(b64)
-  const len = bin.length
-  const bytes = new Uint8Array(len)
-  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes
-}
-
-function uint8ToBase64(arr: Uint8Array): string {
-  let bin = ''
-  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i])
-  return btoa(bin)
-}
-
-function int16ToUint8LE(pcm: Int16Array): Uint8Array {
-  const out = new Uint8Array(pcm.length * 2)
-  const view = new DataView(out.buffer)
-  for (let i = 0; i < pcm.length; i++) view.setInt16(i * 2, pcm[i], true)
-  return out
-}
-
-function uint8ToInt16LE(u8: Uint8Array): Int16Array {
-  const out = new Int16Array(u8.length / 2)
-  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
-  for (let i = 0; i < out.length; i++) out[i] = view.getInt16(i * 2, true)
-  return out
-}
-
-export async function GET(request: Request) {
-  // Upgrade incoming request to a WebSocket (Twilio Media Streams client)
-  const upgrade = (request.headers.get('upgrade') || '').toLowerCase()
-  const hasWsKey = !!request.headers.get('sec-websocket-key')
-  if (!(upgrade === 'websocket' || hasWsKey)) {
-    // Be explicit for non-upgrade hits (browsers/health checks)
-    return new Response('Expected WebSocket upgrade', {
-      status: 426,
-      headers: {
-        Connection: 'Upgrade',
-        Upgrade: 'websocket',
-      },
-    })
-  }
-  // @ts-ignore - WebSocketPair exists in Edge runtime
-  const pair = new WebSocketPair()
-  const twilioWS = pair[1] as unknown as WebSocket
-  const clientWS = pair[0] as unknown as WebSocket
+// Audio conversion utilities with optimized algorithms
+class AudioConverter {
+  private static readonly MU_LAW_BIAS = 132
+  private static readonly MU_LAW_MAX = 32635
   
-  let streamSid = ''
-  let oaiWS: WebSocket | null = null
-  let oaiReady = false
-  let closing = false
-  let pendingPcm: Int16Array[] = []
-  let vadEnabled = true
-  let callSid = ''
-  let lastAssistantItem: string | null = null
-  let responseStartTimestamp: number | null = null
-  let latestMediaTimestamp: number | null = null
-
-  function log(obj: any) {
-    try { console.log('[stream]', JSON.stringify(obj)) } catch {}
-    try { broadcastLog(obj) } catch {}
-  }
-
-  async function ensureOpenAI(model: string, instructions?: string, prompt?: { id: string; version?: string }) {
-    if (oaiWS) return
-    // Mint ephemeral secret (no custom headers available in Edge WebSocket)
-    const openaiKey = process.env.OPENAI_API_KEY
-    if (!openaiKey) throw new Error('OPENAI_API_KEY missing')
-    const payload: any = {
-      expires_after: { anchor: 'created_at', seconds: 600 },
-      session: { type: 'realtime', model }
+  static muLawDecode(u8: Uint8Array): Int16Array {
+    const out = new Int16Array(u8.length)
+    for (let i = 0; i < u8.length; i++) {
+      const u = u8[i]
+      const inv = ~u
+      const sign = (inv & 0x80) ? -1 : 1
+      const exponent = (inv >> 4) & 0x07
+      const mantissa = inv & 0x0f
+      const magnitude = ((mantissa << 4) + 0x08) << (exponent + 2)
+      out[i] = sign * magnitude
     }
-    if (instructions) payload.session.instructions = instructions
-    if (prompt) payload.session.prompt = prompt
-    const token = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'realtime=v1'
-      },
-      body: JSON.stringify(payload)
-    }).then(async (r) => {
-      if (!r.ok) throw new Error(`OpenAI token error ${r.status}`)
-      const j = await r.json()
-      const v = j?.client_secret?.value || j?.client_secret || j?.value
-      if (!v) throw new Error('No client_secret value')
-      return v as string
-    })
-    const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`
-    // Connect using recommended subprotocols: 'realtime' + ephemeral client secret
-    const org = process.env.OPENAI_ORG_ID
-    const project = process.env.OPENAI_PROJECT_ID
-    const protocols = [
-      'realtime',
-      `openai-insecure-api-key.${token}`,
-      ...(org ? [`openai-organization.${org}`] : []),
-      ...(project ? [`openai-project.${project}`] : []),
-    ]
-    oaiWS = new WebSocket(url, protocols)
-    oaiWS.addEventListener('open', () => {
-      log({ at: 'oai.open', model, callSid, streamSid })
-      oaiReady = true
-      // Configure session for audio using env-driven best practices
-      const update = buildServerUpdateFromEnv()
-      // Force g711_ulaw passthrough for Twilio compatibility
-      try {
-        ;(update as any).session = {
-          ...(update as any).session,
-          modalities: ['audio', 'text'],
-          input_audio_format: 'g711_ulaw',
-          output_audio_format: 'g711_ulaw',
-        }
-      } catch {}
-      try { oaiWS!.send(JSON.stringify(update)) } catch {}
-      try {
-        const t = (update as any)?.session?.turn_detection?.type
-        vadEnabled = t !== 'none'
-      } catch {}
-      // No PCM buffering in passthrough mode
-    })
-    oaiWS.addEventListener('message', (ev) => {
-      try {
-        const msg = JSON.parse(ev.data as string)
-        handleOAIMessage(msg)
-      } catch {
-        // Some events may be binary for audio; handle below if needed
-      }
-    })
-    oaiWS.addEventListener('error', (e) => {
-      log({ at: 'oai.error', msg: String((e as any)?.message || e) })
-      safeClose()
-    })
-    oaiWS.addEventListener('close', () => {
-      oaiReady = false
-      log({ at: 'oai.close', callSid, streamSid })
-      if (!closing) safeClose()
-    })
-  }
-
-  function concatInt16(chunks: Int16Array[]): Int16Array {
-    let len = 0
-    for (const c of chunks) len += c.length
-    const out = new Int16Array(len)
-    let off = 0
-    for (const c of chunks) { out.set(c, off); off += c.length }
     return out
   }
 
-  function sendPcmToOpenAI(pcm24k: Int16Array) {
-    if (!oaiWS || !oaiReady) { pendingPcm.push(pcm24k); return }
-    const u8 = int16ToUint8LE(pcm24k)
-    const b64 = uint8ToBase64(u8)
-    const append = { type: 'input_audio_buffer.append', audio: b64 }
-    try { oaiWS.send(JSON.stringify(append)) } catch {}
+  static muLawEncode(pcm: Int16Array): Uint8Array {
+    const out = new Uint8Array(pcm.length)
+    for (let i = 0; i < pcm.length; i++) {
+      let sample = pcm[i]
+      const sign = (sample >> 8) & 0x80
+      if (sign !== 0) sample = -sample
+      sample = Math.min(sample, this.MU_LAW_MAX)
+      sample += this.MU_LAW_BIAS
+      
+      let exponent = 7
+      for (let mask = 0x4000; (sample & mask) === 0 && exponent > 0; exponent--, mask >>= 1) {}
+      
+      const mantissa = (sample >> (exponent + 3)) & 0x0f
+      const mu = ~(sign | (exponent << 4) | mantissa)
+      out[i] = mu & 0xff
+    }
+    return out
   }
 
-  function sendBase64ToOpenAI(b64: string) {
-    if (!oaiWS || !oaiReady) return
-    const append = { type: 'input_audio_buffer.append', audio: b64 }
-    try { oaiWS.send(JSON.stringify(append)) } catch {}
+  // High-quality linear interpolation resampler
+  static resamplePCM16(pcm: Int16Array, srcRate: number, dstRate: number): Int16Array {
+    if (srcRate === dstRate) return pcm
+    
+    const ratio = dstRate / srcRate
+    const outLen = Math.floor(pcm.length * ratio)
+    const out = new Int16Array(outLen)
+    
+    for (let i = 0; i < outLen; i++) {
+      const srcIdx = i / ratio
+      const idx0 = Math.floor(srcIdx)
+      const idx1 = Math.min(idx0 + 1, pcm.length - 1)
+      const fraction = srcIdx - idx0
+      
+      // Linear interpolation
+      out[i] = Math.round(pcm[idx0] * (1 - fraction) + pcm[idx1] * fraction)
+    }
+    
+    return out
   }
 
-  let playbackQueue: Uint8Array[] = []
-  let playbackTimer: number | null = null
-  function clearPlaybackQueue() {
-    playbackQueue = []
-    if (playbackTimer != null) {
-      // @ts-ignore Edge runtime timers
-      clearTimeout(playbackTimer)
-      playbackTimer = null
+  static base64ToUint8(b64: string): Uint8Array {
+    const binString = atob(b64)
+    const len = binString.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binString.charCodeAt(i)
+    }
+    return bytes
+  }
+
+  static uint8ToBase64(arr: Uint8Array): string {
+    const binString = Array.from(arr, byte => String.fromCharCode(byte)).join('')
+    return btoa(binString)
+  }
+
+  static int16ToUint8LE(pcm: Int16Array): Uint8Array {
+    const buffer = new ArrayBuffer(pcm.length * 2)
+    const view = new DataView(buffer)
+    for (let i = 0; i < pcm.length; i++) {
+      view.setInt16(i * 2, pcm[i], true) // little-endian
+    }
+    return new Uint8Array(buffer)
+  }
+
+  static uint8ToInt16LE(u8: Uint8Array): Int16Array {
+    const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
+    const out = new Int16Array(u8.length / 2)
+    for (let i = 0; i < out.length; i++) {
+      out[i] = view.getInt16(i * 2, true) // little-endian
+    }
+    return out
+  }
+}
+
+// Frame buffer for smooth audio playback
+class AudioFrameBuffer {
+  private queue: Uint8Array[] = []
+  private timer: number | null = null
+  private sendFn: (data: Uint8Array) => void
+  
+  constructor(sendFn: (data: Uint8Array) => void) {
+    this.sendFn = sendFn
+  }
+
+  enqueue(data: Uint8Array): void {
+    // Prevent unbounded growth
+    if (this.queue.length >= MAX_PENDING_FRAMES) {
+      console.warn('[AudioBuffer] Dropping frames due to buffer overflow')
+      this.queue = this.queue.slice(-MAX_PENDING_FRAMES / 2)
+    }
+    
+    // Split into 20ms frames for Twilio
+    for (let i = 0; i < data.length; i += TWILIO_FRAME_SIZE) {
+      const frame = data.slice(i, Math.min(i + TWILIO_FRAME_SIZE, data.length))
+      if (frame.length === TWILIO_FRAME_SIZE) {
+        this.queue.push(frame)
+      } else if (frame.length > 0) {
+        // Pad incomplete frame with silence
+        const padded = new Uint8Array(TWILIO_FRAME_SIZE)
+        padded.set(frame)
+        padded.fill(0xff, frame.length) // μ-law silence
+        this.queue.push(padded)
+      }
+    }
+    
+    this.schedulePlayback()
+  }
+
+  clear(): void {
+    this.queue = []
+    if (this.timer !== null) {
+      clearTimeout(this.timer)
+      this.timer = null
     }
   }
-  function enqueuePlayback(pcm24: Int16Array) {
-    // Resample 24k -> 8k and mu-law encode
-    const pcm8 = resamplePCM16(pcm24, 24000, 8000)
-    const ulaw = muLawEncode(pcm8)
-    // Twilio expects 20ms frames: 160 samples @8kHz
-    const frameBytes = 160 // samples
-    for (let i = 0; i < ulaw.length; i += frameBytes) {
-      playbackQueue.push(ulaw.slice(i, Math.min(i + frameBytes, ulaw.length)))
-    }
-    schedulePlayback()
-  }
-  function schedulePlayback() {
-    if (playbackTimer != null) return
+
+  private schedulePlayback(): void {
+    if (this.timer !== null) return
+    
     const sendNext = () => {
-      if (playbackQueue.length === 0) { playbackTimer = null; return }
-      const chunk = playbackQueue.shift()!
-      const payload = uint8ToBase64(chunk)
-      const msg = { event: 'media', streamSid, media: { payload } }
-      try { twilioWS.send(JSON.stringify(msg)) } catch {}
-      // 20ms pacing
-      // @ts-ignore Edge runtime timers
-      playbackTimer = setTimeout(sendNext, 20) as unknown as number
+      if (this.queue.length === 0) {
+        this.timer = null
+        return
+      }
+      
+      const frame = this.queue.shift()!
+      this.sendFn(frame)
+      
+      // Maintain 20ms pacing for smooth playback
+      this.timer = setTimeout(sendNext, FRAME_DURATION_MS) as unknown as number
     }
-    // @ts-ignore Edge runtime timers
-    playbackTimer = setTimeout(sendNext, 0) as unknown as number
+    
+    this.timer = setTimeout(sendNext, 0) as unknown as number
   }
+}
 
-  async function handleOAIMessage(msg: any) {
-    // Handle audio deltas from OpenAI; event names may vary by model version
-    // Try response.output_audio.delta first, then response.audio.delta
-    if (msg.type === 'response.audio.delta' && msg.delta) {
-      // Forward g711 μ-law audio back to Twilio as-is
-      const payload = msg.delta as string
-      if (responseStartTimestamp == null && latestMediaTimestamp != null) {
-        responseStartTimestamp = latestMediaTimestamp
+// Connection manager with resilience
+class RealtimeConnectionManager {
+  private oaiWS: WebSocket | null = null
+  private oaiReady = false
+  private heartbeatTimer: number | null = null
+  private connectionTimer: number | null = null
+  
+  async connect(
+    model: string,
+    instructions?: string,
+    prompt?: { id: string; version?: string }
+  ): Promise<WebSocket> {
+    if (this.oaiWS && this.oaiReady) return this.oaiWS
+    
+    // Clean up existing connection
+    this.disconnect()
+    
+    // Mint ephemeral token with best practices
+    const openaiKey = process.env.OPENAI_API_KEY
+    if (!openaiKey) throw new Error('OPENAI_API_KEY not configured')
+    
+    const tokenPayload: any = {
+      expires_after: { anchor: 'created_at', seconds: 600 },
+      session: {
+        type: 'realtime',
+        model,
+        ...(instructions && { instructions }),
+        ...(prompt && { prompt })
       }
-      if (typeof msg.item_id === 'string') {
-        lastAssistantItem = msg.item_id
-      }
-      const out = { event: 'media', streamSid, media: { payload } }
-      try { twilioWS.send(JSON.stringify(out)) } catch {}
-      try { twilioWS.send(JSON.stringify({ event: 'mark', streamSid })) } catch {}
-    } else if (msg.type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
-      const text = msg.delta as string
-      const key = callSid || streamSid
-      try { await publishTranscript(key, { t: Date.now(), type: 'audio_transcript.delta', text }) } catch {}
-    } else if (msg.type === 'response.text.delta' && typeof msg.delta === 'string') {
-      const text = msg.delta as string
-      const key = callSid || streamSid
-      try { await publishTranscript(key, { t: Date.now(), type: 'text.delta', text }) } catch {}
-    } else if (msg.type === 'input_audio_buffer.speech_started') {
-      // Barge-in: clear Twilio playback and truncate any in-flight assistant audio
-      clearPlaybackQueue()
-      try { twilioWS.send(JSON.stringify({ event: 'clear', streamSid })) } catch {}
-      if (lastAssistantItem && responseStartTimestamp != null && latestMediaTimestamp != null) {
-        const audio_end_ms = Math.max(0, latestMediaTimestamp - responseStartTimestamp)
+    }
+    
+    const tokenResponse = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'realtime=v1'
+      },
+      body: JSON.stringify(tokenPayload)
+    })
+    
+    if (!tokenResponse.ok) {
+      const error = await tokenResponse.text()
+      throw new Error(`OpenAI token error: ${tokenResponse.status} - ${error}`)
+    }
+    
+    const tokenData = await tokenResponse.json()
+    const token = tokenData?.client_secret?.value
+    if (!token) throw new Error('No client_secret in response')
+    
+    // Connect with proper subprotocols
+    const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`
+    const protocols = [
+      'realtime',
+      `openai-insecure-api-key.${token}`,
+      ...(process.env.OPENAI_ORG_ID ? [`openai-organization.${process.env.OPENAI_ORG_ID}`] : []),
+      ...(process.env.OPENAI_PROJECT_ID ? [`openai-project.${process.env.OPENAI_PROJECT_ID}`] : [])
+    ]
+    
+    return new Promise((resolve, reject) => {
+      this.oaiWS = new WebSocket(wsUrl, protocols)
+      
+      // Set connection timeout
+      this.connectionTimer = setTimeout(() => {
+        reject(new Error('OpenAI connection timeout'))
+        this.disconnect()
+      }, CONNECTION_TIMEOUT_MS) as unknown as number
+      
+      this.oaiWS.addEventListener('open', () => {
+        clearTimeout(this.connectionTimer!)
+        this.connectionTimer = null
+        this.oaiReady = true
+        this.startHeartbeat()
+        
+        // Configure session with best practices
+        const sessionUpdate = buildServerUpdateFromEnv()
+        
+        // Override for G.711 μ-law passthrough mode
+        if (sessionUpdate && typeof sessionUpdate === 'object') {
+          (sessionUpdate as any).session = {
+            ...(sessionUpdate as any).session,
+            modalities: ['audio', 'text'],
+            input_audio_format: 'g711_ulaw',
+            output_audio_format: 'g711_ulaw',
+          }
+        }
+        
+        this.oaiWS!.send(JSON.stringify(sessionUpdate))
+        resolve(this.oaiWS!)
+      })
+      
+      this.oaiWS.addEventListener('error', (error) => {
+        clearTimeout(this.connectionTimer!)
+        this.oaiReady = false
+        reject(error)
+      })
+      
+      this.oaiWS.addEventListener('close', () => {
+        this.oaiReady = false
+        this.stopHeartbeat()
+      })
+    })
+  }
+  
+  disconnect(): void {
+    this.stopHeartbeat()
+    if (this.connectionTimer) {
+      clearTimeout(this.connectionTimer)
+      this.connectionTimer = null
+    }
+    if (this.oaiWS) {
+      try {
+        this.oaiWS.close(1000, 'Normal closure')
+      } catch {}
+      this.oaiWS = null
+    }
+    this.oaiReady = false
+  }
+  
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    this.heartbeatTimer = setInterval(() => {
+      if (this.oaiWS && this.oaiReady) {
         try {
-          oaiWS?.send(JSON.stringify({
-            type: 'conversation.item.truncate',
-            item_id: lastAssistantItem,
-            content_index: 0,
-            audio_end_ms,
-          }))
-        } catch {}
+          // Send a lightweight ping to keep connection alive
+          this.oaiWS.send(JSON.stringify({ type: 'session.get' }))
+        } catch {
+          this.stopHeartbeat()
+        }
       }
-      lastAssistantItem = null
-      responseStartTimestamp = null
+    }, HEARTBEAT_INTERVAL_MS) as unknown as number
+  }
+  
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
     }
   }
-
-  function safeClose() {
-    closing = true
-    try { twilioWS.close() } catch {}
-    try { oaiWS?.close() } catch {}
+  
+  get isReady(): boolean {
+    return this.oaiReady && this.oaiWS !== null
   }
+  
+  get socket(): WebSocket | null {
+    return this.oaiWS
+  }
+}
 
-  // @ts-ignore accept() is available in Next.js Edge WS
-  ;(twilioWS as any).accept?.()
+export async function GET(request: Request) {
+  // Validate WebSocket upgrade request
+  const upgrade = request.headers.get('upgrade')?.toLowerCase()
+  const wsKey = request.headers.get('sec-websocket-key')
+  
+  if (upgrade !== 'websocket' || !wsKey) {
+    return new Response('Expected WebSocket upgrade', {
+      status: 426,
+      headers: {
+        'Connection': 'Upgrade',
+        'Upgrade': 'websocket',
+        'Content-Type': 'text/plain'
+      }
+    })
+  }
+  
+  // Create WebSocket pair for Twilio connection
+  // @ts-ignore - WebSocketPair exists in Edge runtime
+  const pair = new WebSocketPair()
+  const [client, server] = pair
+  const twilioWS = server as unknown as WebSocket
+  const clientWS = client as unknown as WebSocket
+  
+  // Connection state
+  const connectionManager = new RealtimeConnectionManager()
+  const audioBuffer = new AudioFrameBuffer((frame) => {
+    const payload = AudioConverter.uint8ToBase64(frame)
+    const msg = {
+      event: 'media',
+      streamSid: state.streamSid,
+      media: { payload }
+    }
+    try {
+      twilioWS.send(JSON.stringify(msg))
+    } catch (e) {
+      console.error('[Twilio] Failed to send audio frame:', e)
+    }
+  })
+  
+  // Session state
+  const state = {
+    streamSid: '',
+    callSid: '',
+    vadEnabled: true,
+    lastAssistantItem: null as string | null,
+    responseStartTimestamp: null as number | null,
+    latestMediaTimestamp: null as number | null,
+    closing: false
+  }
+  
+  // Logging utility
+  const log = (data: any) => {
+    console.log('[Stream]', JSON.stringify(data))
+  }
+  
+  // Clean shutdown handler
+  const cleanup = () => {
+    if (state.closing) return
+    state.closing = true
+    
+    audioBuffer.clear()
+    connectionManager.disconnect()
+    
+    try { twilioWS.close(1000, 'Normal closure') } catch {}
+    try { clientWS.close(1000, 'Normal closure') } catch {}
+  }
+  
+  // Handle OpenAI Realtime messages
+  const handleOpenAIMessage = async (msg: any) => {
+    switch (msg.type) {
+      case 'response.audio.delta':
+        // G.711 μ-law audio passthrough
+        if (msg.delta) {
+          if (state.responseStartTimestamp === null && state.latestMediaTimestamp !== null) {
+            state.responseStartTimestamp = state.latestMediaTimestamp
+          }
+          if (msg.item_id) {
+            state.lastAssistantItem = msg.item_id
+          }
+          
+          // Send audio directly to Twilio
+          const mediaMsg = {
+            event: 'media',
+            streamSid: state.streamSid,
+            media: { payload: msg.delta }
+          }
+          twilioWS.send(JSON.stringify(mediaMsg))
+          
+          // Send mark for synchronization
+          twilioWS.send(JSON.stringify({
+            event: 'mark',
+            streamSid: state.streamSid
+          }))
+        }
+        break
+        
+      case 'response.audio_transcript.delta':
+      case 'response.text.delta':
+        // Publish transcripts for live view
+        if (msg.delta) {
+          const key = state.callSid || state.streamSid
+          await publishTranscript(key, {
+            t: Date.now(),
+            type: msg.type.includes('audio') ? 'audio_transcript.delta' : 'text.delta',
+            text: msg.delta
+          }).catch(() => {})
+        }
+        break
+        
+      case 'input_audio_buffer.speech_started':
+        // Handle barge-in: clear playback and truncate assistant response
+        audioBuffer.clear()
+        twilioWS.send(JSON.stringify({
+          event: 'clear',
+          streamSid: state.streamSid
+        }))
+        
+        // Truncate assistant audio if speaking
+        if (state.lastAssistantItem && state.responseStartTimestamp !== null && state.latestMediaTimestamp !== null) {
+          const audioEndMs = Math.max(0, state.latestMediaTimestamp - state.responseStartTimestamp)
+          const oaiWS = connectionManager.socket
+          if (oaiWS) {
+            oaiWS.send(JSON.stringify({
+              type: 'conversation.item.truncate',
+              item_id: state.lastAssistantItem,
+              content_index: 0,
+              audio_end_ms: audioEndMs
+            }))
+          }
+        }
+        
+        state.lastAssistantItem = null
+        state.responseStartTimestamp = null
+        break
+        
+      case 'error':
+        console.error('[OpenAI] Error:', msg.error)
+        break
+    }
+  }
+  
+  // Accept WebSocket connection
+  // @ts-ignore - accept() exists in Edge runtime
+  twilioWS.accept?.()
+  
+  // Handle Twilio Media Streams messages
   twilioWS.addEventListener('message', async (event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data as string)
-      if (data.event === 'start') {
-        streamSid = data.start.streamSid
-        callSid = data.start.callSid || ''
-        log({ at: 'twilio.start', streamSid, callSid })
-        const model = (process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
-        const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
-        const promptId = process.env.REALTIME_DEFAULT_PROMPT_ID || undefined
-        const promptVersion = process.env.REALTIME_DEFAULT_PROMPT_VERSION || undefined
-        await ensureOpenAI(model, instructions, promptId ? { id: promptId, version: promptVersion } : undefined)
-        // If VAD is disabled, proactively clear buffer for a fresh turn as per docs
-        if (oaiWS && oaiReady && !vadEnabled) {
-          try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.clear' })) } catch {}
-        }
-      } else if (data.event === 'media') {
-        // Incoming μ-law 8k base64 audio from Twilio; forward to OpenAI
-        const b64 = data.media.payload as string
-        latestMediaTimestamp = (data?.media?.timestamp as number) ?? latestMediaTimestamp
-        // Barge-in: If TTS is playing, cancel current response and clear buffer
-        if (oaiWS && oaiReady) {
-          try { oaiWS.send(JSON.stringify({ type: 'response.cancel' })) } catch {}
-        }
-        clearPlaybackQueue()
-        sendBase64ToOpenAI(b64)
-        if ((latestMediaTimestamp || 0) % 1000 < 20) {
-          log({ at: 'twilio.media.tick', ts: latestMediaTimestamp })
-        }
-      } else if (data.event === 'mark' && data.mark?.name === 'commit') {
-        if (oaiWS && oaiReady) {
-          try { oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' })) } catch {}
-          try { oaiWS.send(JSON.stringify({ type: 'response.create' })) } catch {}
-        }
-        log({ at: 'twilio.mark.commit', streamSid })
-      } else if (data.event === 'stop') {
-        log({ at: 'twilio.stop', streamSid })
-        safeClose()
+      
+      switch (data.event) {
+        case 'start':
+          state.streamSid = data.start.streamSid
+          state.callSid = data.start.callSid || ''
+          log({ event: 'start', streamSid: state.streamSid, callSid: state.callSid })
+          
+          // Initialize OpenAI connection
+          const model = process.env.REALTIME_DEFAULT_MODEL || 'gpt-4o-realtime-preview'
+          const instructions = process.env.REALTIME_DEFAULT_INSTRUCTIONS
+          const promptId = process.env.REALTIME_DEFAULT_PROMPT_ID
+          const promptVersion = process.env.REALTIME_DEFAULT_PROMPT_VERSION
+          
+          try {
+            const oaiWS = await connectionManager.connect(
+              model,
+              instructions,
+              promptId ? { id: promptId, version: promptVersion } : undefined
+            )
+            
+            // Set up OpenAI message handler
+            oaiWS.addEventListener('message', (ev) => {
+              try {
+                const msg = JSON.parse(ev.data as string)
+                handleOpenAIMessage(msg).catch(console.error)
+              } catch {}
+            })
+            
+            oaiWS.addEventListener('error', () => cleanup())
+            oaiWS.addEventListener('close', () => {
+              if (!state.closing) cleanup()
+            })
+            
+            // Check VAD configuration
+            const sessionConfig = buildServerUpdateFromEnv()
+            state.vadEnabled = (sessionConfig as any)?.session?.turn_detection?.type !== 'none'
+            
+            // Clear buffer for manual turn if VAD disabled
+            if (!state.vadEnabled) {
+              oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.clear' }))
+            }
+          } catch (error) {
+            console.error('[OpenAI] Connection failed:', error)
+            cleanup()
+          }
+          break
+          
+        case 'media':
+          // Forward μ-law audio to OpenAI
+          if (data.media?.payload) {
+            state.latestMediaTimestamp = data.media.timestamp ?? state.latestMediaTimestamp
+            
+            const oaiWS = connectionManager.socket
+            if (oaiWS && connectionManager.isReady) {
+              // Cancel any in-progress response for barge-in
+              oaiWS.send(JSON.stringify({ type: 'response.cancel' }))
+              
+              // Send audio in G.711 μ-law format
+              oaiWS.send(JSON.stringify({
+                type: 'input_audio_buffer.append',
+                audio: data.media.payload
+              }))
+            }
+          }
+          break
+          
+        case 'mark':
+          // Handle custom marks for turn management
+          if (data.mark?.name === 'commit') {
+            const oaiWS = connectionManager.socket
+            if (oaiWS && connectionManager.isReady) {
+              oaiWS.send(JSON.stringify({ type: 'input_audio_buffer.commit' }))
+              oaiWS.send(JSON.stringify({ type: 'response.create' }))
+            }
+            log({ event: 'mark.commit', streamSid: state.streamSid })
+          }
+          break
+          
+        case 'stop':
+          log({ event: 'stop', streamSid: state.streamSid })
+          cleanup()
+          break
       }
-    } catch (e) {
-      log({ at: 'twilio.msg.error', err: String((e as any)?.message || e) })
+    } catch (error) {
+      console.error('[Twilio] Message handling error:', error)
     }
   })
-  twilioWS.addEventListener('close', () => { safeClose() })
-  twilioWS.addEventListener('error', () => { safeClose() })
-
-  // Return the accept response for the WebSocket
-  // Echo back Sec-WebSocket-Protocol if provided (Twilio uses 'audio') to satisfy subprotocol negotiation
-  const reqProto = request.headers.get('sec-websocket-protocol') || ''
-  const chosenProto = reqProto.split(',').map((s) => s.trim()).filter(Boolean)[0]
-  const headers = new Headers()
-  if (chosenProto) headers.set('Sec-WebSocket-Protocol', chosenProto)
-  // @ts-ignore - Edge web standard response
-  return new Response(null, { status: 101, webSocket: clientWS, headers })
+  
+  twilioWS.addEventListener('close', cleanup)
+  twilioWS.addEventListener('error', (error) => {
+    console.error('[Twilio] WebSocket error:', error)
+    cleanup()
+  })
+  
+  // Return WebSocket upgrade response
+  const requestProtocol = request.headers.get('sec-websocket-protocol')
+  const responseHeaders = new Headers()
+  
+  // Echo back the first requested protocol (Twilio uses 'audio')
+  if (requestProtocol) {
+    const protocol = requestProtocol.split(',')[0].trim()
+    if (protocol) {
+      responseHeaders.set('Sec-WebSocket-Protocol', protocol)
+    }
+  }
+  
+  // @ts-ignore - Edge runtime WebSocket response
+  return new Response(null, {
+    status: 101,
+    // @ts-ignore - webSocket is valid in Edge runtime
+    webSocket: clientWS,
+    headers: responseHeaders
+  } as any)
 }
 
 export async function HEAD() {
+  // Health check endpoint
   return new Response(null, { status: 204 })
-}
-
-// Simple in-memory log fanout for debug clients
-const logSockets: Set<WebSocket> = (globalThis as any).__logSockets || new Set()
-;(globalThis as any).__logSockets = logSockets
-function broadcastLog(obj: any) {
-  const s = JSON.stringify(obj)
-  for (const ws of Array.from(logSockets)) {
-    try { (ws as any).send?.(s) } catch { try { logSockets.delete(ws) } catch {} }
-  }
 }

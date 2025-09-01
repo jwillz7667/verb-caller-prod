@@ -1,16 +1,32 @@
 import { NextRequest } from 'next/server'
 import { buildServerUpdateFromEnv, buildServerUpdate, getRealtimeControlSettings, setRealtimeControlSettings } from '@/lib/realtimeControl'
 import { verifyHmacSignature } from '@/lib/webhooks'
+import crypto from 'crypto'
 
 export const runtime = 'nodejs'
 
-function verifySecret(req: NextRequest) {
+// Constant-time string comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
+function verifySecret(req: NextRequest): boolean {
   const expected = process.env.REALTIME_CONTROL_SECRET
   if (!expected) return true // allow if not configured
+  
   const auth = req.headers.get('authorization') || ''
   const hSecret = req.headers.get('x-webhook-secret') || ''
-  if (auth.startsWith('Bearer ') && auth.slice(7) === expected) return true
-  if (hSecret && hSecret === expected) return true
+  
+  if (auth.startsWith('Bearer ')) {
+    const token = auth.slice(7)
+    if (timingSafeEqual(token, expected)) return true
+  }
+  
+  if (hSecret && timingSafeEqual(hSecret, expected)) return true
+  
   return false
 }
 

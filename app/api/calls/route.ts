@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!from) return Response.json({ error: 'Twilio from number missing' }, { status: 400 })
 
     const base = resolveBaseUrl(req.url)
-    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}`
+    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=sip`
 
     const callCreatePayload: any = {
       to: data.toNumber,

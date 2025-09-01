@@ -6,16 +6,43 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// Helper to escape XML special characters
+const escapeXml = (str: string): string => {
+  return str.replace(/[<>&"']/g, (c) => {
+    const chars: Record<string, string> = { 
+      '<': '&lt;', 
+      '>': '&gt;', 
+      '&': '&amp;', 
+      '"': '&quot;', 
+      "'": '&apos;' 
+    }
+    return chars[c] || c
+  })
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   let secret = searchParams.get('secret') || ''
   const sipDomain = 'sip.openai.com'
-  // Allow toggling scheme/transport/port for interoperability testing
-  const scheme = (searchParams.get('scheme') || 'sip').toLowerCase() // 'sip' | 'sips'
-  const transport = (searchParams.get('transport') || 'tls').toLowerCase() // 'tls' | 'tcp' | 'udp'
+  
+  // Validate and sanitize scheme parameter
+  const schemeParam = searchParams.get('scheme')?.toLowerCase()
+  const scheme = (schemeParam === 'sips' || schemeParam === 'sip') ? schemeParam : 'sip'
+  
+  // Validate and sanitize transport parameter  
+  const transportParam = searchParams.get('transport')?.toLowerCase()
+  const transport = (transportParam === 'tls' || transportParam === 'tcp' || transportParam === 'udp') ? transportParam : 'tls'
+  
+  // Validate port parameter (must be valid port number)
   const portParam = searchParams.get('port')
-  const port = portParam && /^[0-9]{2,5}$/.test(portParam) ? portParam : ''
-  const mode = (searchParams.get('mode') || process.env.TWIML_DEFAULT_MODE || 'sip').toLowerCase() // 'sip' | 'stream'
+  const portNum = portParam ? parseInt(portParam, 10) : 0
+  const port = (portNum >= 1 && portNum <= 65535) ? portNum.toString() : ''
+  
+  // Validate mode parameter
+  const modeParam = searchParams.get('mode')?.toLowerCase()
+  const defaultMode = process.env.TWIML_DEFAULT_MODE?.toLowerCase()
+  const mode = (modeParam === 'stream' || modeParam === 'sip') ? modeParam : 
+               (defaultMode === 'stream' || defaultMode === 'sip') ? defaultMode : 'sip'
   // If no secret is provided, mint one on the fly (automatic flow)
   if (!secret) {
     try {
@@ -26,7 +53,9 @@ export async function GET(req: NextRequest) {
       const model = (searchParams.get('model') || process.env.REALTIME_DEFAULT_MODEL || 'gpt-realtime')
       const promptId = searchParams.get('prompt_id') || undefined
       const promptVersion = searchParams.get('prompt_version') || undefined
-      const instructions = searchParams.get('instructions') || process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
+      // Limit instructions length to prevent abuse (max 1000 chars)
+      const instructionsParam = searchParams.get('instructions')
+      const instructions = instructionsParam?.slice(0, 1000) || process.env.REALTIME_DEFAULT_INSTRUCTIONS || undefined
       const expiresSeconds = parseInt(process.env.REALTIME_EXPIRES_SECONDS || '600', 10)
       const payload: any = {
         expires_after: { anchor: 'created_at', seconds: Number.isFinite(expiresSeconds) ? expiresSeconds : 600 },
@@ -78,12 +107,12 @@ export async function GET(req: NextRequest) {
     const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
     const streamUrl = `${wsBase}/api/stream/twilio`
     const statusCb = process.env.TWILIO_STREAM_STATUS_CALLBACK_URL
-    const statusAttr = statusCb ? ` statusCallback=\"${statusCb}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
-    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${streamUrl}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
+    const statusAttr = statusCb ? ` statusCallback=\"${escapeXml(statusCb)}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
+    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${escapeXml(streamUrl)}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
     return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
   }
 
-  // Compose target URI
+  // Compose target URI with proper escaping
   let sipUri: string
   if (scheme === 'sips') {
     // TLS implied; Twilio defaults to 5061 if port omitted
@@ -92,7 +121,7 @@ export async function GET(req: NextRequest) {
     // Default to SIP over TLS via transport param
     sipUri = `sip:${secret}@${sipDomain}${port ? `:${port}` : ''};transport=${transport}`
   }
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${sipUri}</Sip>\n  </Dial>\n</Response>`
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${escapeXml(sipUri)}</Sip>\n  </Dial>\n</Response>`
   return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
 }
 

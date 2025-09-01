@@ -1,13 +1,26 @@
 import { NextRequest } from 'next/server'
 import { getRealtimeControlSettings, setRealtimeControlSettings, RealtimeControlSettings } from '@/lib/realtimeControl'
+import crypto from 'crypto'
 
 export const runtime = 'nodejs'
 
-function verifyAdmin(req: NextRequest) {
+// Constant-time string comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
+function verifyAdmin(req: NextRequest): boolean {
   const admin = process.env.REALTIME_CONTROL_ADMIN_SECRET
-  if (!admin) return false
+  if (!admin || admin.length < 32) return false // Require strong secret
+  
   const auth = req.headers.get('authorization') || ''
-  return auth.startsWith('Bearer ') && auth.slice(7) === admin
+  if (!auth.startsWith('Bearer ')) return false
+  
+  const token = auth.slice(7)
+  return timingSafeEqual(token, admin)
 }
 
 export async function GET(req: NextRequest) {
