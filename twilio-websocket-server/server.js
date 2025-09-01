@@ -150,6 +150,7 @@ wss.on('connection', async (twilioWS, request) => {
         const sessionUpdate = {
           type: 'session.update',
           session: {
+            type: 'realtime',  // Add required session type
             modalities: ['audio', 'text'],
             input_audio_format: 'g711_ulaw',
             output_audio_format: 'g711_ulaw',
