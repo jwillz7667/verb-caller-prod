@@ -174,45 +174,53 @@ class RealtimeConnectionManager {
   async connect(
     model: string,
     instructions?: string,
-    prompt?: { id: string; version?: string }
+    prompt?: { id: string; version?: string },
+    providedSecret?: string
   ): Promise<WebSocket> {
     if (this.oaiWS && this.oaiReady) return this.oaiWS
     
     // Clean up existing connection
     this.disconnect()
     
-    // Mint ephemeral token with best practices
-    const openaiKey = process.env.OPENAI_API_KEY
-    if (!openaiKey) throw new Error('OPENAI_API_KEY not configured')
+    let token: string
     
-    const tokenPayload: any = {
-      expires_after: { anchor: 'created_at', seconds: 600 },
-      session: {
-        type: 'realtime',
-        model,
-        ...(instructions && { instructions }),
-        ...(prompt && { prompt })
+    if (providedSecret) {
+      // Use the provided secret from the TwiML request
+      token = providedSecret
+    } else {
+      // Mint ephemeral token with best practices
+      const openaiKey = process.env.OPENAI_API_KEY
+      if (!openaiKey) throw new Error('OPENAI_API_KEY not configured')
+      
+      const tokenPayload: any = {
+        expires_after: { anchor: 'created_at', seconds: 600 },
+        session: {
+          type: 'realtime',
+          model,
+          ...(instructions && { instructions }),
+          ...(prompt && { prompt })
+        }
       }
+      
+      const tokenResponse = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'realtime=v1'
+        },
+        body: JSON.stringify(tokenPayload)
+      })
+      
+      if (!tokenResponse.ok) {
+        const error = await tokenResponse.text()
+        throw new Error(`OpenAI token error: ${tokenResponse.status} - ${error}`)
+      }
+      
+      const tokenData = await tokenResponse.json()
+      token = tokenData?.client_secret?.value
+      if (!token) throw new Error('No client_secret in response')
     }
-    
-    const tokenResponse = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'realtime=v1'
-      },
-      body: JSON.stringify(tokenPayload)
-    })
-    
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.text()
-      throw new Error(`OpenAI token error: ${tokenResponse.status} - ${error}`)
-    }
-    
-    const tokenData = await tokenResponse.json()
-    const token = tokenData?.client_secret?.value
-    if (!token) throw new Error('No client_secret in response')
     
     // Connect with proper subprotocols
     const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`
@@ -328,6 +336,10 @@ export async function GET(request: Request) {
       }
     })
   }
+  
+  // Extract secret from URL parameters if provided
+  const url = new URL(request.url)
+  const providedSecret = url.searchParams.get('secret') || undefined
   
   // Create WebSocket pair for Twilio connection
   // @ts-ignore - WebSocketPair exists in Edge runtime
@@ -479,7 +491,8 @@ export async function GET(request: Request) {
             const oaiWS = await connectionManager.connect(
               model,
               instructions,
-              promptId ? { id: promptId, version: promptVersion } : undefined
+              promptId ? { id: promptId, version: promptVersion } : undefined,
+              providedSecret
             )
             
             // Set up OpenAI message handler

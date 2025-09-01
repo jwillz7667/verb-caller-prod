@@ -105,7 +105,8 @@ export async function GET(req: NextRequest) {
     const u = new URL(req.url)
     const base = (process.env.PUBLIC_BASE_URL || `${u.protocol}//${u.host}`).replace(/\/$/, '')
     const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
-    const streamUrl = `${wsBase}/api/stream/twilio`
+    // Pass the secret as a query parameter to the WebSocket
+    const streamUrl = `${wsBase}/api/stream/twilio?secret=${encodeURIComponent(secret)}`
     const statusCb = process.env.TWILIO_STREAM_STATUS_CALLBACK_URL
     const statusAttr = statusCb ? ` statusCallback=\"${escapeXml(statusCb)}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
     const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${escapeXml(streamUrl)}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`

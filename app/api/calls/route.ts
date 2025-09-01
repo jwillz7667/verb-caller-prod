@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
     if (!from) return Response.json({ error: 'Twilio from number missing' }, { status: 400 })
 
     const base = resolveBaseUrl(req.url)
-    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=sip&transport=tls`
+    // Use Media Streams mode instead of direct SIP (more reliable with Twilio)
+    const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=stream`
 
     const callCreatePayload: any = {
       to: data.toNumber,
