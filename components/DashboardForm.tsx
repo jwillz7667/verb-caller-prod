@@ -460,11 +460,7 @@ export default function DashboardForm() {
         embedded_media: []
       }
       const body: any = { expires_after: { anchor: 'created_at', seconds: v.expiresSeconds }, session }
-      if (includeServerWebhook) {
-        const serverUrlProd = `https://verbio.app/api/realtime/control`
-        body.server = { url: serverUrlProd }
-        if (serverSecret) body.server.secret = serverSecret
-      }
+      // Do not include `server` in client_secret creation; unsupported by API
       const res = await fetch('/api/realtime-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
         const txt = await res.text()
