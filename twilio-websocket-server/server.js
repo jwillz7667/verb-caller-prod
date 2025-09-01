@@ -69,11 +69,32 @@ const server = http.createServer((req, res) => {
   }
 });
 
+// Production-ready logging
+function log(level, message, data = {}) {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    level,
+    message,
+    ...data,
+    env: process.env.NODE_ENV || 'development'
+  };
+  
+  if (process.env.NODE_ENV === 'production') {
+    // In production, output structured JSON logs
+    console.log(JSON.stringify(logEntry));
+  } else {
+    // In development, use readable format
+    console.log(`[${timestamp}] ${level}: ${message}`, data);
+  }
+}
+
 // Create WebSocket server
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', async (twilioWS, request) => {
-  console.log('New Twilio WebSocket connection from:', request.headers['x-forwarded-for'] || request.socket.remoteAddress);
+  const clientIp = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
+  log('info', 'New Twilio WebSocket connection', { clientIp });
   
   // Parse secret from URL path or query parameters
   const fullUrl = request.url || '';
@@ -495,5 +516,15 @@ wss.on('connection', async (twilioWS, request) => {
 
 server.listen(PORT, () => {
   console.log(`WebSocket server listening on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+  
+  // Show proper URL based on environment
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    console.log(`Health check: https://${process.env.RAILWAY_PUBLIC_DOMAIN}/health`);
+  } else if (process.env.RENDER_EXTERNAL_URL) {
+    console.log(`Health check: ${process.env.RENDER_EXTERNAL_URL}/health`);
+  } else if (process.env.NODE_ENV === 'production') {
+    console.log(`Health check available on port ${PORT}`);
+  } else {
+    console.log(`Health check: http://localhost:${PORT}/health`);
+  }
 });

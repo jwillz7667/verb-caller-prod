@@ -1,11 +1,12 @@
 {
   "name": "twilio-websocket-server",
   "version": "1.0.0",
-  "description": "WebSocket server for Twilio Media Streams to OpenAI Realtime API",
+  "description": "Production WebSocket server for Twilio Media Streams to OpenAI Realtime API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development node server.js",
+    "test": "echo \"Health check: curl http://localhost:3001/health\""
   },
   "engines": {
     "node": ">=18.0.0"
@@ -13,5 +14,15 @@
   "dependencies": {
     "ws": "^8.16.0",
     "dotenv": "^16.4.1"
-  }
+  },
+  "keywords": [
+    "openai",
+    "realtime",
+    "twilio",
+    "websocket",
+    "voice",
+    "telephony"
+  ],
+  "author": "",
+  "license": "MIT"
 }
