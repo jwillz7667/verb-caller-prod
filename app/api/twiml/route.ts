@@ -118,7 +118,8 @@ export async function GET(req: NextRequest) {
   // Force SIPS with explicit port 5061 to avoid DNS SRV ambiguity
   const enforcedPort = '5061'
   const sipUri = `sips:${secret}@${sipDomain}:${enforcedPort}`
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Sip>${escapeXml(sipUri)}</Sip>\n  </Dial>\n</Response>`
+  const actionUrl = `${base}/api/twiml/action`
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial action="${escapeXml(actionUrl)}" method="POST" timeout="15">\n    <Sip>${escapeXml(sipUri)}</Sip>\n  </Dial>\n</Response>`
   return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
 }
 
