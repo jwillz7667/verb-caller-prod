@@ -509,7 +509,7 @@ export async function GET(request: Request) {
             })
             
             // Check VAD configuration
-            const sessionConfig = buildServerUpdateFromEnv()
+            const sessionConfig = buildServerUpdate()
             state.vadEnabled = (sessionConfig as any)?.session?.turn_detection?.type !== 'none'
             
             // Clear buffer for manual turn if VAD disabled

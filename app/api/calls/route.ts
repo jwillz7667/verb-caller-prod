@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
     // Priority: Custom settings from UI > Request body > Environment defaults
     let ephemeralPayload = data.ephemeral
     if (customSettings && ephemeralPayload?.session) {
-      ephemeralPayload.session = {
+      // Create merged session with proper typing
+      const mergedSession: any = {
         ...ephemeralPayload.session,
         // Apply saved settings (these override the form values)
         ...(customSettings.voice && { voice: customSettings.voice }),
@@ -39,8 +40,9 @@ export async function POST(req: NextRequest) {
         }),
         ...(customSettings.turn_detection && { turn_detection: customSettings.turn_detection }),
         ...(customSettings.tools && { tools: customSettings.tools }),
-        ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice }),
+        ...(customSettings.tool_choice && { tool_choice: customSettings.tool_choice as any }),
       }
+      ephemeralPayload.session = mergedSession
     }
 
     // Create ephemeral client secret with merged settings
