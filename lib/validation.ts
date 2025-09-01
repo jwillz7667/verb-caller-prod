@@ -24,9 +24,10 @@ const RealtimeSessionCore = z.object({
     version: z.union([z.string(), z.number()]).optional(),
   }).optional(),
   tools: z.array(ToolSchema).optional().default([]),
-  tool_choice: z.enum(['auto', 'required', 'none']).default('auto'),
+  tool_choice: z.union([z.enum(['auto', 'required', 'none']), z.string()]).default('auto'),
   temperature: z.number().min(0).max(2).default(0.7),
   max_output_tokens: z.union([z.literal('inf'), z.number().int().min(1)]).default('inf'),
+  max_response_output_tokens: z.union([z.literal('inf'), z.number().int().min(1), z.null()]).optional(),
   modalities: z.array(z.enum(['audio', 'text'])).default(['audio']),
   voice: z.string().default('alloy'),
   turn_detection: z.object({
@@ -38,10 +39,11 @@ const RealtimeSessionCore = z.object({
     create_response: z.boolean().default(true),
     interrupt_response: z.boolean().default(true),
   }).default({ type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 200, create_response: true, interrupt_response: true }),
-  input_audio_format: z.object({
-    type: z.literal('audio/pcm').default('audio/pcm'),
-    rate: z.number().int().default(24000)
-  }).default({ type: 'audio/pcm', rate: 24000 }),
+  input_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('pcm16').optional(),
+  output_audio_format: z.enum(['pcm16', 'g711_ulaw', 'g711_alaw']).default('pcm16').optional(),
+  input_audio_transcription: z.object({
+    model: z.enum(['whisper-1']).default('whisper-1')
+  }).nullable().optional(),
   transcription: TranscriptionSchema.default({ enabled: false, model: 'gpt-4o-transcribe' }),
   // Support additional and custom noise reduction profiles
   noise_reduction: z.union([
