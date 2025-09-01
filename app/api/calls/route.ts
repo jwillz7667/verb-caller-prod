@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
       : getTwilioClient()
     const from = allowClientCredsServer() ? getTwilioFromNumber(data.twilioFromNumber) : getTwilioFromNumber()
     if (!from) return Response.json({ error: 'Twilio from number missing' }, { status: 400 })
+    if (!/^\+[1-9]\d{1,14}$/.test(from)) {
+      return Response.json({ error: 'Invalid TWILIO_FROM_NUMBER (must be E.164)' }, { status: 400 })
+    }
 
     const twimlUrl = `${base}/api/twiml?secret=${encodeURIComponent(secretVal)}&mode=sip&scheme=sips&transport=tls`
 

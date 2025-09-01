@@ -32,7 +32,9 @@ export async function createEphemeralClientSecret(apiKey: string, payload: Ephem
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'OpenAI-Beta': 'realtime=v1'
+        'OpenAI-Beta': 'realtime=v1',
+        ...(process.env.OPENAI_ORG_ID ? { 'OpenAI-Organization': process.env.OPENAI_ORG_ID } : {}),
+        ...(process.env.OPENAI_PROJECT_ID ? { 'OpenAI-Project': process.env.OPENAI_PROJECT_ID } : {})
       },
       timeout: 15000
     }
