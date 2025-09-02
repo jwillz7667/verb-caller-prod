@@ -384,7 +384,7 @@ export async function GET(request: Request) {
   const handleOpenAIMessage = async (msg: any) => {
     switch (msg.type) {
       case 'response.audio.delta':
-        // G.711 μ-law audio passthrough
+        // G.711 μ-law audio passthrough, paced via buffer for smoothness
         if (msg.delta) {
           if (state.responseStartTimestamp === null && state.latestMediaTimestamp !== null) {
             state.responseStartTimestamp = state.latestMediaTimestamp
@@ -392,20 +392,10 @@ export async function GET(request: Request) {
           if (msg.item_id) {
             state.lastAssistantItem = msg.item_id
           }
-          
-          // Send audio directly to Twilio
-          const mediaMsg = {
-            event: 'media',
-            streamSid: state.streamSid,
-            media: { payload: msg.delta }
-          }
-          twilioWS.send(JSON.stringify(mediaMsg))
-          
-          // Send mark for synchronization
-          twilioWS.send(JSON.stringify({
-            event: 'mark',
-            streamSid: state.streamSid
-          }))
+
+          // Enqueue to frame buffer which paces frames at 20ms
+          const u8 = AudioConverter.base64ToUint8(msg.delta)
+          audioBuffer.enqueue(u8)
         }
         break
         
@@ -448,6 +438,20 @@ export async function GET(request: Request) {
         state.responseStartTimestamp = null
         break
         
+      case 'response.created':
+      case 'response.done':
+      case 'session.created':
+      case 'session.updated':
+      case 'conversation.item.created':
+      case 'conversation.item.done':
+      case 'conversation.item.delta':
+      case 'conversation.item.truncated':
+      case 'input_audio_buffer.committed':
+      case 'input_audio_buffer.cleared':
+      case 'input_audio_buffer.speech_started':
+      case 'input_audio_buffer.speech_stopped':
+        log({ source: 'openai', type: msg.type })
+        break
       case 'error':
         console.error('[OpenAI] Error:', msg.error)
         break
@@ -513,12 +517,9 @@ export async function GET(request: Request) {
           // Forward μ-law audio to OpenAI
           if (data.media?.payload) {
             state.latestMediaTimestamp = data.media.timestamp ?? state.latestMediaTimestamp
-            
+
             const oaiWS = connectionManager.socket
             if (oaiWS && connectionManager.isReady) {
-              // Cancel any in-progress response for barge-in
-              oaiWS.send(JSON.stringify({ type: 'response.cancel' }))
-              
               // Send audio in G.711 μ-law format
               oaiWS.send(JSON.stringify({
                 type: 'input_audio_buffer.append',
