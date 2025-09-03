@@ -106,3 +106,4 @@ wscat -c ws://localhost:3001?secret=your_openai_secret
 - The server maintains the WebSocket bridge between Twilio and OpenAI
 - Audio is passed through in G.711 μ-law format (no conversion needed)
 - VAD (Voice Activity Detection) is handled by OpenAI
+ - For GA Realtime API, do not send the `OpenAI-Beta: realtime=v1` header
