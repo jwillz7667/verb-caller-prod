@@ -175,8 +175,6 @@ wss.on('connection', async (twilioWS, request) => {
         // NOTE: Include required session.type to satisfy GA API contract
         const sessionConfig = {
           type: 'realtime',
-          // Voice selection (all 11 available voices)
-          voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
           // System instructions (following OpenAI cookbook best practices)
           instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || `ROLE: Helpful AI assistant on a phone call.

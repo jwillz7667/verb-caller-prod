@@ -34,8 +34,8 @@ Updates session configuration. Send after `session.created`.
 {
   "type": "session.update",
   "session": {
+    "type": "realtime",
     "modalities": ["audio", "text"],
-    "voice": "alloy",
     "instructions": "System instructions",
     "input_audio_format": "g711_ulaw",
     "output_audio_format": "g711_ulaw",
@@ -128,7 +128,7 @@ Triggers response generation with optional overrides.
   "response": {
     "modalities": ["audio", "text"],
     "instructions": null,
-    "voice": null,
+    "voice": "alloy",
     "output_audio_format": "g711_ulaw",
     "tools": [],
     "tool_choice": "auto",
@@ -246,6 +246,7 @@ No automatic turn detection; responses triggered manually.
 ### 1. Session Configuration
 - Specify the model via WebSocket URL: `wss://api.openai.com/v1/realtime?model=gpt-realtime`
 - Include `session.type: "realtime"` in the first `session.update` after `session.created`.
+- Do not include `voice` in `session.update` (set it per `response.create` or rely on default voice).
 - Configure VAD based on use case:
   - Phone: `server_vad` with 500ms silence
   - Desktop: `semantic_vad` for natural conversation
