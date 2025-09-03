@@ -185,8 +185,6 @@ wss.on('connection', async (twilioWS, request) => {
         if (u.input_audio_transcription && typeof u.input_audio_transcription === 'object') sessionConfig.input_audio_transcription = u.input_audio_transcription;
         if (Array.isArray(u.tools)) sessionConfig.tools = u.tools;
         if (typeof u.tool_choice === 'string') sessionConfig.tool_choice = u.tool_choice;
-        if (typeof u.temperature === 'number') sessionConfig.temperature = u.temperature;
-        if (typeof u.max_response_output_tokens === 'number') sessionConfig.max_response_output_tokens = u.max_response_output_tokens;
 
         // Apply safe defaults only if not supplied by user (avoid overriding ephemeral token settings)
         if (!('turn_detection' in sessionConfig)) {
@@ -206,12 +204,6 @@ wss.on('connection', async (twilioWS, request) => {
         }
         if (!('tool_choice' in sessionConfig) && process.env.REALTIME_TOOL_CHOICE) {
           sessionConfig.tool_choice = process.env.REALTIME_TOOL_CHOICE;
-        }
-        if (!('temperature' in sessionConfig)) {
-          sessionConfig.temperature = parseFloat(process.env.REALTIME_TEMPERATURE || '0.8');
-        }
-        if (!('max_response_output_tokens' in sessionConfig)) {
-          sessionConfig.max_response_output_tokens = parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096;
         }
         
         // Remove null/undefined values and ensure required type field
@@ -350,7 +342,7 @@ wss.on('connection', async (twilioWS, request) => {
         state.isResponseActive = true;
         state.hasInterrupted = false;
         break;
-        
+      
       case 'response.output_item.added':
         console.log('Output item added:', msg.item?.id);
         if (msg.item?.id) {
@@ -370,6 +362,8 @@ wss.on('connection', async (twilioWS, request) => {
         console.log('Content part done');
         break;
         
+      // GA: response.output_text.delta (support legacy alias response.text.delta)
+      case 'response.output_text.delta':
       case 'response.text.delta':
         // Text response chunk (if modality includes text)
         if (msg.delta) {
@@ -377,10 +371,14 @@ wss.on('connection', async (twilioWS, request) => {
         }
         break;
         
+      // GA: response.output_text.done (support legacy alias response.text.done)
+      case 'response.output_text.done':
       case 'response.text.done':
         console.log('\nText response complete');
         break;
         
+      // GA: response.output_audio.delta (support legacy alias response.audio.delta)
+      case 'response.output_audio.delta':
       case 'response.audio.delta':
         // Forward audio to Twilio
         if (msg.delta && twilioWS.readyState === WebSocket.OPEN) {
@@ -406,16 +404,22 @@ wss.on('connection', async (twilioWS, request) => {
         }
         break;
       
+      // GA: response.output_audio_transcript.delta (support legacy alias response.audio_transcript.delta)
+      case 'response.output_audio_transcript.delta':
       case 'response.audio_transcript.delta':
         if (typeof msg.delta === 'string' && msg.response?.id) {
           process.stdout.write(msg.delta);
         }
         break;
       
+      // GA: response.output_audio_transcript.done (support legacy alias response.audio_transcript.done)
+      case 'response.output_audio_transcript.done':
       case 'response.audio_transcript.done':
         console.log('\nAudio transcript complete');
         break;
         
+      // GA: response.output_audio.done (support legacy alias response.audio.done)
+      case 'response.output_audio.done':
       case 'response.audio.done':
         console.log('Audio response complete');
         break;
@@ -534,6 +538,7 @@ wss.on('connection', async (twilioWS, request) => {
             const r = {};
             if (state.userVoice) r.voice = state.userVoice;
             if (state.userOverrides && typeof state.userOverrides.temperature === 'number') r.temperature = state.userOverrides.temperature;
+            if (state.userOverrides && typeof state.userOverrides.max_response_output_tokens === 'number') r.max_output_tokens = state.userOverrides.max_response_output_tokens;
             // Ensure telephony-compatible audio in response (Twilio expects G.711 μ-law)
             r.output_audio_format = (typeof state.userOutputAudioFormat === 'string')
               ? state.userOutputAudioFormat
