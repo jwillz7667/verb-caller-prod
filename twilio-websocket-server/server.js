@@ -180,7 +180,6 @@ wss.on('connection', async (twilioWS, request) => {
         // Apply user overrides first (from TwiML <Parameter name="session" value=...>)
         const u = state.userOverrides || {};
         if (typeof u.instructions === 'string' && u.instructions.trim()) sessionConfig.instructions = u.instructions;
-        if (Array.isArray(u.modalities)) sessionConfig.modalities = u.modalities;
         if (typeof u.input_audio_format === 'string') sessionConfig.input_audio_format = u.input_audio_format;
         if (typeof u.output_audio_format === 'string') sessionConfig.output_audio_format = u.output_audio_format;
         if (u.turn_detection && typeof u.turn_detection === 'object') sessionConfig.turn_detection = u.turn_detection;
@@ -191,7 +190,6 @@ wss.on('connection', async (twilioWS, request) => {
         if (typeof u.max_response_output_tokens === 'number') sessionConfig.max_response_output_tokens = u.max_response_output_tokens;
 
         // Apply safe defaults only if not supplied by user (avoid overriding ephemeral token settings)
-        if (!('modalities' in sessionConfig)) sessionConfig.modalities = ['audio', 'text'];
         if (!('input_audio_format' in sessionConfig)) sessionConfig.input_audio_format = 'g711_ulaw';
         if (!('output_audio_format' in sessionConfig)) sessionConfig.output_audio_format = 'g711_ulaw';
         if (!('turn_detection' in sessionConfig)) {
@@ -494,7 +492,7 @@ wss.on('connection', async (twilioWS, request) => {
               if (typeof overrides.voice === 'string') state.userVoice = overrides.voice;
               // Filter to known, GA-allowed session.update fields only
               const allowed = [
-                'instructions','modalities','input_audio_format','output_audio_format','input_audio_transcription',
+                'instructions','input_audio_format','output_audio_format','input_audio_transcription',
                 'turn_detection','tools','tool_choice','temperature','max_response_output_tokens'
               ];
               const filtered = {};

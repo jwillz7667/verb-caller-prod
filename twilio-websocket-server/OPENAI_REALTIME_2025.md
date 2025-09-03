@@ -35,7 +35,6 @@ Updates session configuration. Send after `session.created`.
   "type": "session.update",
   "session": {
     "type": "realtime",
-    "modalities": ["audio", "text"],
     "instructions": "System instructions",
     "input_audio_format": "g711_ulaw",
     "output_audio_format": "g711_ulaw",
