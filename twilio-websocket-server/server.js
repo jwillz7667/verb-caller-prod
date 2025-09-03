@@ -155,10 +155,9 @@ wss.on('connection', async (twilioWS, request) => {
       
       console.log('Connecting to OpenAI with model:', model);
       
-      // Prefer Authorization header over insecure subprotocol for production
+      // Prefer Authorization header over insecure subprotocol for production (GA Realtime requires no beta header)
       const headers = {
-        Authorization: `Bearer ${providedSecret}`,
-        'OpenAI-Beta': 'realtime=v1'
+        Authorization: `Bearer ${providedSecret}`
       };
       if (process.env.OPENAI_ORG_ID) headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID;
       if (process.env.OPENAI_PROJECT_ID) headers['OpenAI-Project'] = process.env.OPENAI_PROJECT_ID;
@@ -172,8 +171,7 @@ wss.on('connection', async (twilioWS, request) => {
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
         
-        // Configure session according to OpenAI Realtime API documentation
-        // Note: modalities and audio formats are set in token creation, not session.update
+        // Configure session according to OpenAI Realtime GA API documentation
         const sessionConfig = {
           // Voice selection (all 11 available voices)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
@@ -192,12 +190,11 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           
           // Turn detection (VAD) configuration
           turn_detection: {
-            type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad or none
+            type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad | semantic_vad | none
             threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
             prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
             silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
-            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE ? process.env.REALTIME_VAD_CREATE_RESPONSE === 'true' : true,
-            interrupt_response: process.env.REALTIME_VAD_INTERRUPT ? process.env.REALTIME_VAD_INTERRUPT === 'true' : true
+            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE ? process.env.REALTIME_VAD_CREATE_RESPONSE === 'true' : true
           },
           
           // Input audio transcription (optional)

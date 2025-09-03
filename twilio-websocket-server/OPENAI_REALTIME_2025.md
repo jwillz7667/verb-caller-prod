@@ -29,14 +29,12 @@
 ### Client Events (Client → Server)
 
 #### 1. session.update
-Updates session configuration. Often the first event sent.
+Updates session configuration. Send after `session.created`.
 ```json
 {
   "type": "session.update",
   "session": {
-    "type": "realtime",
-    "model": "gpt-realtime",
-    "modalities": ["audio", "text", "image"],
+    "modalities": ["audio", "text"],
     "voice": "alloy",
     "instructions": "System instructions",
     "input_audio_format": "g711_ulaw",
@@ -246,7 +244,8 @@ No automatic turn detection; responses triggered manually.
 ## Best Practices
 
 ### 1. Session Configuration
-- Always set `session.type: "realtime"` (required)
+- Specify the model via WebSocket URL: `wss://api.openai.com/v1/realtime?model=gpt-realtime`
+- Do not include `model` or `type` in `session.update`
 - Configure VAD based on use case:
   - Phone: `server_vad` with 500ms silence
   - Desktop: `semantic_vad` for natural conversation
