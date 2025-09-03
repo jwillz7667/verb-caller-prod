@@ -145,7 +145,8 @@ wss.on('connection', async (twilioWS, request) => {
     isResponseActive: false,  // Track if response is currently active
     hasInterrupted: false,    // Prevent multiple interruption attempts
     userOverrides: null,      // Session overrides passed from UI via TwiML <Parameter>
-    userVoice: null           // Optional voice preference for response.create
+    userVoice: null,          // Optional voice preference for response.create
+    userOutputAudioFormat: null // Optional output audio format preference for response.create
   };
 
   // Connect to OpenAI
@@ -180,8 +181,6 @@ wss.on('connection', async (twilioWS, request) => {
         // Apply user overrides first (from TwiML <Parameter name="session" value=...>)
         const u = state.userOverrides || {};
         if (typeof u.instructions === 'string' && u.instructions.trim()) sessionConfig.instructions = u.instructions;
-        if (typeof u.input_audio_format === 'string') sessionConfig.input_audio_format = u.input_audio_format;
-        if (typeof u.output_audio_format === 'string') sessionConfig.output_audio_format = u.output_audio_format;
         if (u.turn_detection && typeof u.turn_detection === 'object') sessionConfig.turn_detection = u.turn_detection;
         if (u.input_audio_transcription && typeof u.input_audio_transcription === 'object') sessionConfig.input_audio_transcription = u.input_audio_transcription;
         if (Array.isArray(u.tools)) sessionConfig.tools = u.tools;
@@ -190,8 +189,6 @@ wss.on('connection', async (twilioWS, request) => {
         if (typeof u.max_response_output_tokens === 'number') sessionConfig.max_response_output_tokens = u.max_response_output_tokens;
 
         // Apply safe defaults only if not supplied by user (avoid overriding ephemeral token settings)
-        if (!('input_audio_format' in sessionConfig)) sessionConfig.input_audio_format = 'g711_ulaw';
-        if (!('output_audio_format' in sessionConfig)) sessionConfig.output_audio_format = 'g711_ulaw';
         if (!('turn_detection' in sessionConfig)) {
           sessionConfig.turn_detection = {
             type: process.env.REALTIME_VAD_MODE || 'server_vad',
@@ -488,11 +485,12 @@ wss.on('connection', async (twilioWS, request) => {
               overrides = JSON.parse(raw);
             }
             if (overrides && typeof overrides === 'object') {
-              // Extract voice separately for response.create
+              // Extract voice and output format separately for response.create
               if (typeof overrides.voice === 'string') state.userVoice = overrides.voice;
+              if (typeof overrides.output_audio_format === 'string') state.userOutputAudioFormat = overrides.output_audio_format;
               // Filter to known, GA-allowed session.update fields only
               const allowed = [
-                'instructions','input_audio_format','output_audio_format','input_audio_transcription',
+                'instructions','input_audio_transcription',
                 'turn_detection','tools','tool_choice','temperature','max_response_output_tokens'
               ];
               const filtered = {};
@@ -536,6 +534,10 @@ wss.on('connection', async (twilioWS, request) => {
             const r = {};
             if (state.userVoice) r.voice = state.userVoice;
             if (state.userOverrides && typeof state.userOverrides.temperature === 'number') r.temperature = state.userOverrides.temperature;
+            // Ensure telephony-compatible audio in response (Twilio expects G.711 μ-law)
+            r.output_audio_format = (typeof state.userOutputAudioFormat === 'string')
+              ? state.userOutputAudioFormat
+              : 'g711_ulaw';
             if (Object.keys(r).length > 0) responseCreate.response = r;
             
             oaiWS.send(JSON.stringify(responseCreate));

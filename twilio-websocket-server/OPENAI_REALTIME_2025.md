@@ -36,8 +36,6 @@ Updates session configuration. Send after `session.created`.
   "session": {
     "type": "realtime",
     "instructions": "System instructions",
-    "input_audio_format": "g711_ulaw",
-    "output_audio_format": "g711_ulaw",
     "input_audio_transcription": {
       "model": "whisper-1"
     },
