@@ -139,6 +139,21 @@ export async function GET(req: NextRequest) {
   if (mode === 'stream') {
     // Use external WebSocket URL if configured (e.g., Railway deployment)
     let streamUrl: string
+    // Include user-provided session overrides to pass into the WebSocket server
+    const settings = getRealtimeControlSettings()
+    const sessionOverrides: Record<string, any> = {}
+    if (settings?.instructions) sessionOverrides.instructions = settings.instructions
+    if (typeof settings?.temperature === 'number') sessionOverrides.temperature = settings.temperature
+    if (typeof settings?.max_response_output_tokens === 'number') sessionOverrides.max_response_output_tokens = settings.max_response_output_tokens
+    if (settings?.turn_detection) sessionOverrides.turn_detection = settings.turn_detection
+    if (settings?.tools) sessionOverrides.tools = settings.tools
+    if (settings?.tool_choice) sessionOverrides.tool_choice = settings.tool_choice
+    if (settings?.input_audio_transcription) sessionOverrides.input_audio_transcription = settings.input_audio_transcription
+    if (settings?.input_audio_format) sessionOverrides.input_audio_format = settings.input_audio_format
+    if (settings?.output_audio_format) sessionOverrides.output_audio_format = settings.output_audio_format
+    // Voice is included so the WS server can apply it to response.create (not session.update)
+    if (settings?.voice) (sessionOverrides as any).voice = settings.voice
+    const sessionB64 = Buffer.from(JSON.stringify(sessionOverrides)).toString('base64')
     if (process.env.TWILIO_WEBSOCKET_URL) {
       // External WebSocket server (Railway, Render, etc.)
       // Railway strips query params, so we encode the secret in the path
@@ -153,7 +168,7 @@ export async function GET(req: NextRequest) {
     }
     const statusCb = process.env.TWILIO_STREAM_STATUS_CALLBACK_URL
     const statusAttr = statusCb ? ` statusCallback=\"${escapeXml(statusCb)}\" statusCallbackMethod=\"${process.env.TWILIO_STREAM_STATUS_CALLBACK_METHOD || 'POST'}\" statusCallbackEvent=\"start media mark stop\"` : ''
-    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${escapeXml(streamUrl)}\"${statusAttr} />\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
+    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Start>\n    <Stream url=\"${escapeXml(streamUrl)}\"${statusAttr}>\n      <Parameter name=\"session\" value=\"${escapeXml(sessionB64)}\"/>\n    </Stream>\n  </Start>\n  <Pause length=\"60\"/>\n</Response>`
     return new Response(xml, { headers: { 'Content-Type': 'text/xml' } })
   }
 

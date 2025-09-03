@@ -143,7 +143,9 @@ wss.on('connection', async (twilioWS, request) => {
     responseStartTimestamp: null,
     latestMediaTimestamp: null,
     isResponseActive: false,  // Track if response is currently active
-    hasInterrupted: false     // Prevent multiple interruption attempts
+    hasInterrupted: false,    // Prevent multiple interruption attempts
+    userOverrides: null,      // Session overrides passed from UI via TwiML <Parameter>
+    userVoice: null           // Optional voice preference for response.create
   };
 
   // Connect to OpenAI
@@ -171,47 +173,51 @@ wss.on('connection', async (twilioWS, request) => {
       oaiWS.on('open', () => {
         console.log('Connected to OpenAI');
         
-        // Configure session according to OpenAI Realtime GA API documentation
-        // NOTE: Include required session.type to satisfy GA API contract
-        const sessionConfig = {
-          type: 'realtime',
-          
-          // System instructions (following OpenAI cookbook best practices)
-          instructions: process.env.REALTIME_DEFAULT_INSTRUCTIONS || `ROLE: Helpful AI assistant on a phone call.
-OBJECTIVE: Assist the caller effectively.
-PERSONALITY: Friendly, professional, conversational. Natural pacing for phone.
-INSTRUCTIONS: ALWAYS follow caller instructions. Prioritize requests. Be concise. Ask for clarification when needed.
-CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understanding.`,
-          
-          // Modalities and audio formats for telephony
-          modalities: ['audio', 'text'],
-          input_audio_format: 'g711_ulaw',
-          output_audio_format: 'g711_ulaw',
-          
-          // Turn detection (VAD) configuration
-          turn_detection: {
-            type: process.env.REALTIME_VAD_MODE || 'server_vad',  // server_vad | semantic_vad | none
-            threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),  // 0.0 to 1.0
+        // Build session.update according to GA specs with UI overrides
+        // Start with required type only; do not include unsupported fields
+        const sessionConfig = { type: 'realtime' };
+
+        // Apply user overrides first (from TwiML <Parameter name="session" value=...>)
+        const u = state.userOverrides || {};
+        if (typeof u.instructions === 'string' && u.instructions.trim()) sessionConfig.instructions = u.instructions;
+        if (Array.isArray(u.modalities)) sessionConfig.modalities = u.modalities;
+        if (typeof u.input_audio_format === 'string') sessionConfig.input_audio_format = u.input_audio_format;
+        if (typeof u.output_audio_format === 'string') sessionConfig.output_audio_format = u.output_audio_format;
+        if (u.turn_detection && typeof u.turn_detection === 'object') sessionConfig.turn_detection = u.turn_detection;
+        if (u.input_audio_transcription && typeof u.input_audio_transcription === 'object') sessionConfig.input_audio_transcription = u.input_audio_transcription;
+        if (Array.isArray(u.tools)) sessionConfig.tools = u.tools;
+        if (typeof u.tool_choice === 'string') sessionConfig.tool_choice = u.tool_choice;
+        if (typeof u.temperature === 'number') sessionConfig.temperature = u.temperature;
+        if (typeof u.max_response_output_tokens === 'number') sessionConfig.max_response_output_tokens = u.max_response_output_tokens;
+
+        // Apply safe defaults only if not supplied by user (avoid overriding ephemeral token settings)
+        if (!('modalities' in sessionConfig)) sessionConfig.modalities = ['audio', 'text'];
+        if (!('input_audio_format' in sessionConfig)) sessionConfig.input_audio_format = 'g711_ulaw';
+        if (!('output_audio_format' in sessionConfig)) sessionConfig.output_audio_format = 'g711_ulaw';
+        if (!('turn_detection' in sessionConfig)) {
+          sessionConfig.turn_detection = {
+            type: process.env.REALTIME_VAD_MODE || 'server_vad',
+            threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),
             prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
             silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
             create_response: process.env.REALTIME_VAD_CREATE_RESPONSE ? process.env.REALTIME_VAD_CREATE_RESPONSE === 'true' : true
-          },
-          
-          // Input audio transcription (optional)
-          input_audio_transcription: process.env.REALTIME_TRANSCRIBE_INPUT === 'true' ? {
-            model: 'whisper-1'
-          } : null,
-          
-          // Tools array (for function calling)
-          tools: process.env.REALTIME_TOOLS ? JSON.parse(process.env.REALTIME_TOOLS) : [],
-          
-          // Tool choice strategy
-          tool_choice: process.env.REALTIME_TOOL_CHOICE || 'auto',  // auto, none, required, or function name
-          
-          // Response generation parameters
-          temperature: parseFloat(process.env.REALTIME_TEMPERATURE || '0.8'),
-          max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096
-        };
+          };
+        }
+        if (!('input_audio_transcription' in sessionConfig) && process.env.REALTIME_TRANSCRIBE_INPUT === 'true') {
+          sessionConfig.input_audio_transcription = { model: 'whisper-1' };
+        }
+        if (!('tools' in sessionConfig) && process.env.REALTIME_TOOLS) {
+          try { sessionConfig.tools = JSON.parse(process.env.REALTIME_TOOLS); } catch (_) {}
+        }
+        if (!('tool_choice' in sessionConfig) && process.env.REALTIME_TOOL_CHOICE) {
+          sessionConfig.tool_choice = process.env.REALTIME_TOOL_CHOICE;
+        }
+        if (!('temperature' in sessionConfig)) {
+          sessionConfig.temperature = parseFloat(process.env.REALTIME_TEMPERATURE || '0.8');
+        }
+        if (!('max_response_output_tokens' in sessionConfig)) {
+          sessionConfig.max_response_output_tokens = parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096;
+        }
         
         // Remove null/undefined values and ensure required type field
         const cleanSession = {};
@@ -474,6 +480,31 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           state.streamSid = msg.start.streamSid;
           state.callSid = msg.start.callSid || '';
           console.log('Stream started:', state.streamSid);
+          // Read custom parameters from Twilio to capture UI overrides
+          try {
+            const cp = (msg.start && msg.start.customParameters) ? msg.start.customParameters : {};
+            let overrides = null;
+            if (cp && typeof cp.session === 'string') {
+              // Expect base64-encoded JSON
+              const raw = Buffer.from(cp.session, 'base64').toString('utf8');
+              overrides = JSON.parse(raw);
+            }
+            if (overrides && typeof overrides === 'object') {
+              // Extract voice separately for response.create
+              if (typeof overrides.voice === 'string') state.userVoice = overrides.voice;
+              // Filter to known, GA-allowed session.update fields only
+              const allowed = [
+                'instructions','modalities','input_audio_format','output_audio_format','input_audio_transcription',
+                'turn_detection','tools','tool_choice','temperature','max_response_output_tokens'
+              ];
+              const filtered = {};
+              for (const k of allowed) { if (k in overrides) filtered[k] = overrides[k]; }
+              state.userOverrides = filtered;
+              console.log('Applied user overrides from Twilio parameters');
+            }
+          } catch (e) {
+            console.error('Failed to parse Twilio customParameters.session:', e?.message || e);
+          }
           
           // Connect to OpenAI
           await connectToOpenAI();
@@ -504,15 +535,10 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
             const responseCreate = { type: 'response.create' };
             
             // Only add response config if we have specific overrides
-            if (process.env.REALTIME_RESPONSE_VOICE || process.env.REALTIME_RESPONSE_TEMPERATURE) {
-              responseCreate.response = {};
-              if (process.env.REALTIME_RESPONSE_VOICE) {
-                responseCreate.response.voice = process.env.REALTIME_RESPONSE_VOICE;
-              }
-              if (process.env.REALTIME_RESPONSE_TEMPERATURE) {
-                responseCreate.response.temperature = parseFloat(process.env.REALTIME_RESPONSE_TEMPERATURE);
-              }
-            }
+            const r: any = {};
+            if (state.userVoice) r.voice = state.userVoice;
+            if (state.userOverrides && typeof state.userOverrides.temperature === 'number') r.temperature = state.userOverrides.temperature;
+            if (Object.keys(r).length > 0) responseCreate.response = r;
             
             oaiWS.send(JSON.stringify(responseCreate));
             console.log('Manual turn commit with response creation');
