@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "ws:dev": "NODE_ENV=development node twilio-websocket-server/server.js",
+    "ws:start": "NODE_ENV=production node twilio-websocket-server/server.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
