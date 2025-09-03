@@ -107,3 +107,12 @@ wscat -c ws://localhost:3001?secret=your_openai_secret
 - Audio is passed through in G.711 μ-law format (no conversion needed)
 - VAD (Voice Activity Detection) is handled by OpenAI
  - For GA Realtime API, do not send the `OpenAI-Beta: realtime=v1` header
+
+## Deployment tips (avoiding npm ERR! path /app and SIGTERM)
+
+- Ensure the working directory contains this folder's `package.json` when starting. If your platform sets `WORKDIR /app`, either deploy this folder as its own service or run Node directly:
+  - Start command: `node server.js` (instead of `npm start`) so the app is PID 1 and handles signals correctly.
+- This server now handles SIGTERM/SIGINT and closes gracefully. If your platform still reports `npm ERR! signal SIGTERM`, prefer running `node server.js`.
+- From the monorepo root, you can also use:
+  - `npm run ws:dev`
+  - `npm run ws:start`

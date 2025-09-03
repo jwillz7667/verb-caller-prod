@@ -173,6 +173,7 @@ wss.on('connection', async (twilioWS, request) => {
         
         // Configure session according to OpenAI Realtime GA API documentation
         const sessionConfig = {
+          type: 'session',
           // Voice selection (all 11 available voices)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
@@ -213,14 +214,14 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
           max_response_output_tokens: parseInt(process.env.REALTIME_MAX_TOKENS || '4096') || 4096
         };
         
-        // Remove null/undefined values and 'type' field to avoid API errors
+        // Remove null/undefined values and ensure required type field
         const cleanSession = {};
         for (const [key, value] of Object.entries(sessionConfig)) {
-          // Skip 'type' as it's not valid for session.update
-          if (key !== 'type' && value !== null && value !== undefined) {
+          if (value !== null && value !== undefined) {
             cleanSession[key] = value;
           }
         }
+        if (!cleanSession.type) cleanSession.type = 'session';
         
         // Store config for later use after session.created
         state.pendingSessionConfig = cleanSession;
@@ -579,6 +580,29 @@ server.listen(PORT, () => {
 });
 
 // Process-level hardening
+function gracefulShutdown(signal) {
+  try {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    try {
+      if (wss) {
+        for (const client of wss.clients) {
+          try { client.close(); } catch (_) {}
+        }
+        try { wss.close(); } catch (_) {}
+      }
+    } catch (_) {}
+    server.close(() => {
+      console.log('HTTP server closed. Exiting.');
+      process.exit(0);
+    });
+    // Fallback timeout
+    setTimeout(() => process.exit(0), 5000).unref();
+  } catch (e) {
+    process.exit(1);
+  }
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
 });
