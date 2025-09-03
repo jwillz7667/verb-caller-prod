@@ -245,7 +245,7 @@ No automatic turn detection; responses triggered manually.
 
 ### 1. Session Configuration
 - Specify the model via WebSocket URL: `wss://api.openai.com/v1/realtime?model=gpt-realtime`
-- Do not include `model` or `type` in `session.update`
+- Include `session.type: "realtime"` in the first `session.update` after `session.created`.
 - Configure VAD based on use case:
   - Phone: `server_vad` with 500ms silence
   - Desktop: `semantic_vad` for natural conversation

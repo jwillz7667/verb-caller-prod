@@ -172,7 +172,9 @@ wss.on('connection', async (twilioWS, request) => {
         console.log('Connected to OpenAI');
         
         // Configure session according to OpenAI Realtime GA API documentation
+        // NOTE: Include required session.type to satisfy GA API contract
         const sessionConfig = {
+          type: 'realtime',
           // Voice selection (all 11 available voices)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
