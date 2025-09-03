@@ -535,7 +535,7 @@ wss.on('connection', async (twilioWS, request) => {
             const responseCreate = { type: 'response.create' };
             
             // Only add response config if we have specific overrides
-            const r: any = {};
+            const r = {};
             if (state.userVoice) r.voice = state.userVoice;
             if (state.userOverrides && typeof state.userOverrides.temperature === 'number') r.temperature = state.userOverrides.temperature;
             if (Object.keys(r).length > 0) responseCreate.response = r;
