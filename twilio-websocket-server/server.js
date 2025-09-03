@@ -173,7 +173,6 @@ wss.on('connection', async (twilioWS, request) => {
         
         // Configure session according to OpenAI Realtime GA API documentation
         const sessionConfig = {
-          type: 'session',
           // Voice selection (all 11 available voices)
           voice: process.env.REALTIME_DEFAULT_VOICE || 'alloy',
           
@@ -221,7 +220,6 @@ CONVERSATION: Greet warmly. Listen actively. Respond helpfully. Confirm understa
             cleanSession[key] = value;
           }
         }
-        if (!cleanSession.type) cleanSession.type = 'session';
         
         // Store config for later use after session.created
         state.pendingSessionConfig = cleanSession;
