@@ -181,21 +181,12 @@ wss.on('connection', async (twilioWS, request) => {
         // Apply user overrides first (from TwiML <Parameter name="session" value=...>)
         const u = state.userOverrides || {};
         if (typeof u.instructions === 'string' && u.instructions.trim()) sessionConfig.instructions = u.instructions;
-        if (u.turn_detection && typeof u.turn_detection === 'object') sessionConfig.turn_detection = u.turn_detection;
         if (u.input_audio_transcription && typeof u.input_audio_transcription === 'object') sessionConfig.input_audio_transcription = u.input_audio_transcription;
         if (Array.isArray(u.tools)) sessionConfig.tools = u.tools;
         if (typeof u.tool_choice === 'string') sessionConfig.tool_choice = u.tool_choice;
 
         // Apply safe defaults only if not supplied by user (avoid overriding ephemeral token settings)
-        if (!('turn_detection' in sessionConfig)) {
-          sessionConfig.turn_detection = {
-            type: process.env.REALTIME_VAD_MODE || 'server_vad',
-            threshold: parseFloat(process.env.REALTIME_VAD_THRESHOLD || '0.5'),
-            prefix_padding_ms: parseInt(process.env.REALTIME_VAD_PREFIX_MS || '300'),
-            silence_duration_ms: parseInt(process.env.REALTIME_VAD_SILENCE_MS || '500'),
-            create_response: process.env.REALTIME_VAD_CREATE_RESPONSE ? process.env.REALTIME_VAD_CREATE_RESPONSE === 'true' : true
-          };
-        }
+        // Turn detection is not configured via session.update in GA; rely on defaults
         if (!('input_audio_transcription' in sessionConfig) && process.env.REALTIME_TRANSCRIBE_INPUT === 'true') {
           sessionConfig.input_audio_transcription = { model: 'whisper-1' };
         }
@@ -494,8 +485,7 @@ wss.on('connection', async (twilioWS, request) => {
               if (typeof overrides.output_audio_format === 'string') state.userOutputAudioFormat = overrides.output_audio_format;
               // Filter to known, GA-allowed session.update fields only
               const allowed = [
-                'instructions','input_audio_transcription',
-                'turn_detection','tools','tool_choice','temperature','max_response_output_tokens'
+                'instructions','input_audio_transcription','tools','tool_choice'
               ];
               const filtered = {};
               for (const k of allowed) { if (k in overrides) filtered[k] = overrides[k]; }

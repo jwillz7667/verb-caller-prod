@@ -2,18 +2,24 @@
   "name": "twilio-websocket-server",
   "version": "1.0.0",
   "description": "Production WebSocket server for Twilio Media Streams to OpenAI Realtime API",
-  "main": "server.js",
+  "main": "fastify-server.js",
   "scripts": {
-    "start": "NODE_ENV=production node server.js",
-    "dev": "NODE_ENV=development node server.js",
-    "test": "echo \"Health check: curl http://localhost:3001/health\""
+    "start": "NODE_ENV=production node fastify-server.js",
+    "dev": "NODE_ENV=development node fastify-server.js",
+    "test": "echo \"Health check: curl http://localhost:5050/\""
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "ws": "^8.16.0",
-    "dotenv": "^16.4.1"
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/websocket": "^11.2.0",
+    "@openai/agents": "^0.1.0",
+    "@openai/agents-extensions": "^0.1.0",
+    "@openai/agents-realtime": "^0.1.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.5.0",
+    "ws": "^8.16.0"
   },
   "keywords": [
     "openai",
@@ -24,5 +30,11 @@
     "telephony"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
 }

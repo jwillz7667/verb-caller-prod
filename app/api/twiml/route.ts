@@ -72,15 +72,8 @@ export async function GET(req: NextRequest) {
         session: { 
           type: 'realtime', 
           model,
-          // Essential for telephony - set modalities and audio formats
-          modalities: ['audio', 'text'],  // Both audio and text for telephony
-          input_audio_format: 'g711_ulaw',  // Twilio uses G.711 μ-law
-          output_audio_format: 'g711_ulaw', // Match Twilio format
           // Apply custom settings if available
           ...(customSettings?.voice && { voice: customSettings.voice }),
-          ...(customSettings?.temperature && { temperature: customSettings.temperature }),
-          ...(customSettings?.max_response_output_tokens && { max_response_output_tokens: customSettings.max_response_output_tokens }),
-          ...(customSettings?.turn_detection && { turn_detection: customSettings.turn_detection }),
           ...(customSettings?.tools && { tools: customSettings.tools }),
           ...(customSettings?.tool_choice && { tool_choice: customSettings.tool_choice }),
           ...(customSettings?.input_audio_transcription && { input_audio_transcription: customSettings.input_audio_transcription }),
@@ -145,7 +138,6 @@ export async function GET(req: NextRequest) {
     if (settings?.instructions) sessionOverrides.instructions = settings.instructions
     if (typeof settings?.temperature === 'number') sessionOverrides.temperature = settings.temperature
     if (typeof settings?.max_response_output_tokens === 'number') sessionOverrides.max_response_output_tokens = settings.max_response_output_tokens
-    if (settings?.turn_detection) sessionOverrides.turn_detection = settings.turn_detection
     if (settings?.tools) sessionOverrides.tools = settings.tools
     if (settings?.tool_choice) sessionOverrides.tool_choice = settings.tool_choice
     if (settings?.input_audio_transcription) sessionOverrides.input_audio_transcription = settings.input_audio_transcription

@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
-    "ws:dev": "NODE_ENV=development node twilio-websocket-server/server.js",
-    "ws:start": "NODE_ENV=production node twilio-websocket-server/server.js"
+    "ws:dev": "NODE_ENV=development node twilio-websocket-server/fastify-server.js",
+    "ws:start": "NODE_ENV=production node twilio-websocket-server/fastify-server.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

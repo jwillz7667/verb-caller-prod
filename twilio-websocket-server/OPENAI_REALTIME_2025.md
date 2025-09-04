@@ -39,17 +39,8 @@ Updates session configuration. Send after `session.created`.
     "input_audio_transcription": {
       "model": "whisper-1"
     },
-    "turn_detection": {
-      "type": "server_vad",
-      "threshold": 0.5,
-      "prefix_padding_ms": 300,
-      "silence_duration_ms": 500,
-      "create_response": true
-    },
     "tools": [],
-    "tool_choice": "auto",
-    "temperature": 0.8,
-    "max_response_output_tokens": 4096
+    "tool_choice": "auto"
   }
 }
 ```
