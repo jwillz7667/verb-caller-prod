@@ -17,7 +17,7 @@ if (!OPENAI_API_KEY) {
 const PORT = +(process.env.PORT || 5050);
 
 // Initialize Fastify
-const fastify = Fastify({ trustProxy: true });
+const fastify = Fastify({ trustProxy: true, logger: true });
 fastify.register(fastifyFormBody);
 fastify.register(fastifyWs);
 
