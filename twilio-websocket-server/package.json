@@ -6,6 +6,7 @@
   "scripts": {
     "start": "NODE_ENV=production node fastify-server.js",
     "dev": "NODE_ENV=development node fastify-server.js",
+    "ws:start": "echo 'no build step required'",
     "test": "echo \"Health check: curl http://localhost:5050/\""
   },
   "engines": {
