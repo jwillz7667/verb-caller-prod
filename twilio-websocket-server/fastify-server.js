@@ -104,6 +104,7 @@ fastify.register(async (fastify) => {
       if (u.input_audio_transcription && typeof u.input_audio_transcription === 'object') sessionConfig.input_audio_transcription = u.input_audio_transcription;
       if (Array.isArray(u.tools)) sessionConfig.tools = u.tools;
       if (typeof u.tool_choice === 'string') sessionConfig.tool_choice = u.tool_choice;
+      if (typeof u.model === 'string' && u.model.trim()) sessionConfig.model = u.model;
       // Additional client controls (best effort; ignored if not GA-supported)
       if (typeof u.voice === 'string') sessionConfig.voice = u.voice;
       if (typeof u.input_audio_format === 'string') sessionConfig.input_audio_format = u.input_audio_format;
@@ -120,9 +121,15 @@ fastify.register(async (fastify) => {
       if (!('tool_choice' in sessionConfig) && process.env.REALTIME_TOOL_CHOICE) {
         sessionConfig.tool_choice = process.env.REALTIME_TOOL_CHOICE;
       }
+      if (!('model' in sessionConfig) && process.env.REALTIME_DEFAULT_MODEL) {
+        sessionConfig.model = process.env.REALTIME_DEFAULT_MODEL;
+      }
+      if (!('output_audio_format' in sessionConfig)) {
+        sessionConfig.output_audio_format = state.userOutputAudioFormat || 'g711_ulaw';
+      }
       try {
         await session.update(sessionConfig);
-        console.log('Session updated with GA config');
+        console.log('Session updated with GA config', { model: sessionConfig.model, output_audio_format: sessionConfig.output_audio_format });
       } catch (e) {
         console.error('session.update failed:', e);
       }
