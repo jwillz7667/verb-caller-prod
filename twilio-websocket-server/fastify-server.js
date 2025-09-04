@@ -43,7 +43,6 @@ fastify.all('/incoming-call', async (request, reply) => {
   const twimlResponse = `
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>O.K. you can start talking!</Say>
     <Connect>
         <Stream url="wss://${request.headers.host}/media-stream" />
     </Connect>

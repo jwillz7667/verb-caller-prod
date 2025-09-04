@@ -148,9 +148,18 @@ export async function GET(req: NextRequest) {
     const sessionB64 = Buffer.from(JSON.stringify(sessionOverrides)).toString('base64')
     if (process.env.TWILIO_WEBSOCKET_URL) {
       // External WebSocket server (Railway, Render, etc.)
-      // Railway strips query params, so we encode the secret in the path
+      // Compatibility:
+      // - If TWILIO_WEBSOCKET_URL contains a {SECRET} placeholder, replace it
+      // - If it points to the Fastify route (/media-stream), do not append the secret
+      // - Otherwise, append the secret for legacy servers that expect it in the path
       const wsBase = process.env.TWILIO_WEBSOCKET_URL.replace(/\/$/, '')
-      streamUrl = `${wsBase}/${encodeURIComponent(secret)}`
+      if (wsBase.includes('{SECRET}')) {
+        streamUrl = wsBase.replace('{SECRET}', encodeURIComponent(secret))
+      } else if (/\/media-stream$/i.test(wsBase)) {
+        streamUrl = wsBase
+      } else {
+        streamUrl = `${wsBase}/${encodeURIComponent(secret)}`
+      }
     } else {
       // Fallback to local WebSocket (won't work on Vercel)
       const u = new URL(req.url)
